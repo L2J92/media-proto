@@ -1,6 +1,8 @@
 package com.live;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.condition.EnabledIf;
+import org.testcontainers.DockerClientFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -22,10 +24,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 
 /**
  * 운영과 같은 PostgreSQL 에서 마이그레이션·잠금·제약을 검증한다.
- * Docker 가 없는 로컬 환경에서는 건너뛰고, CI(GitHub Actions)에서는 실행된다.
+ * Docker 가 없는 로컬 환경에서는 건너뛴다. CI(환경변수 CI=true)에서는 절대 건너뛰지 않아
+ * Docker 가 없으면 실패로 드러난다(통과 = 실제로 PostgreSQL 에서 실행됨).
  */
-@Testcontainers(disabledWithoutDocker = true)
+@Testcontainers
+@EnabledIf("runnable")
 class PostgresIntegrationTest extends IntegrationTestSupport {
+
+    static boolean runnable() {
+        return System.getenv("CI") != null || DockerClientFactory.instance().isDockerAvailable();
+    }
 
     @Container
     @ServiceConnection
