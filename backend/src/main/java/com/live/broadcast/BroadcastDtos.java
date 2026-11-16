@@ -19,11 +19,15 @@ public final class BroadcastDtos {
 
     public record BroadcastResponse(
             Long id, String title, String description, BroadcastStatus status, BroadcastSource source,
-            OwnerDto owner, Instant createdAt, Instant startedAt, Instant endedAt) {
+            OwnerDto owner, Instant createdAt, Instant startedAt, Instant endedAt, Integer viewerCount) {
         public static BroadcastResponse from(Broadcast b) {
+            return from(b, null);
+        }
+
+        public static BroadcastResponse from(Broadcast b, Integer viewerCount) {
             return new BroadcastResponse(b.getId(), b.getTitle(), b.getDescription(), b.getStatus(), b.getSource(),
                     new OwnerDto(b.getOwner().getId(), b.getOwner().getNickname()),
-                    b.getCreatedAt(), b.getStartedAt(), b.getEndedAt());
+                    b.getCreatedAt(), b.getStartedAt(), b.getEndedAt(), viewerCount);
         }
     }
 

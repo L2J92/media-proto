@@ -29,10 +29,13 @@ public class BroadcastService {
     private final UserRepository userRepository;
     private final MediaServer mediaServer;
     private final RecordingService recordingService;
+    private final ViewerCountService viewerCounts;
     private final Clock clock;
 
     public BroadcastService(BroadcastRepository broadcastRepository, UserRepository userRepository,
-                            MediaServer mediaServer, RecordingService recordingService, Clock clock) {
+                            MediaServer mediaServer, RecordingService recordingService,
+                            ViewerCountService viewerCounts, Clock clock) {
+        this.viewerCounts = viewerCounts;
         this.broadcastRepository = broadcastRepository;
         this.userRepository = userRepository;
         this.mediaServer = mediaServer;
@@ -49,13 +52,14 @@ public class BroadcastService {
     @Transactional(readOnly = true)
     public PageResponse<BroadcastResponse> list(BroadcastStatus status, int page, int size) {
         Page<Broadcast> result = broadcastRepository.search(status, PageRequest.of(Math.max(page, 0), Math.clamp(size, 1, 50)));
-        return new PageResponse<>(result.map(BroadcastResponse::from).getContent(),
+        return new PageResponse<>(result.map(b -> BroadcastResponse.from(b, viewerCounts.viewerCount(b))).getContent(),
                 result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages());
     }
 
     @Transactional(readOnly = true)
     public BroadcastResponse get(Long id) {
-        return BroadcastResponse.from(find(id));
+        Broadcast b = find(id);
+        return BroadcastResponse.from(b, viewerCounts.viewerCount(b));
     }
 
     @Transactional(readOnly = true)

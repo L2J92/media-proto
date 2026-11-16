@@ -46,6 +46,17 @@ class ChatTest extends IntegrationTestSupport {
     }
 
     @Test
+    void floodingIsRateLimited() throws Exception {
+        MockHttpSession owner = signup("owner");
+        long id = createBroadcast(owner, "도배 방송");
+        for (int i = 0; i < 5; i++) {
+            perform(post("/api/broadcasts/" + id + "/chats"), owner, "{\"content\":\"msg" + i + "\"}").andExpect(status().isCreated());
+        }
+        perform(post("/api/broadcasts/" + id + "/chats"), owner, "{\"content\":\"too fast\"}")
+                .andExpect(status().isTooManyRequests()).andExpect(jsonPath("$.code").value("TOO_MANY_CHATS"));
+    }
+
+    @Test
     void emptyChatRejected() throws Exception {
         MockHttpSession owner = signup("owner");
         long id = createBroadcast(owner, "방송");

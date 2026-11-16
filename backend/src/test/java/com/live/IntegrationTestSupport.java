@@ -28,9 +28,10 @@ public abstract class IntegrationTestSupport {
     @Autowired protected MockMvc mvc;
     @Autowired protected ObjectMapper om;
     @Autowired protected FakeMediaServer media;
+    @Autowired protected FakePaymentGateway payments;
 
     @BeforeEach
-    void resetMedia() { media.reset(); }
+    void resetFakes() { media.reset(); payments.reset(); }
 
     /** 새 사용자로 가입하고 로그인된 세션을 돌려준다. */
     protected MockHttpSession signup(String nickname) throws Exception {

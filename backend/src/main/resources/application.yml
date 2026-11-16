@@ -53,6 +53,12 @@ recording:
     bucket: ${S3_BUCKET:}
     public-base-url: ${S3_PUBLIC_BASE_URL:}
 
+toss:
+  # 토스페이먼츠 테스트 키 (개발자센터 → API 키). 결제창(payment)용 test_ck_ / test_sk_
+  client-key: ${TOSS_CLIENT_KEY:}
+  secret-key: ${TOSS_SECRET_KEY:}
+  api-url: https://api.tosspayments.com
+
 app:
   demo-accounts-enabled: ${DEMO_ACCOUNTS_ENABLED:true}
 

@@ -20,6 +20,10 @@ services:
         sync: false
       - key: LIVEKIT_API_SECRET
         sync: false
+      - key: TOSS_CLIENT_KEY
+        sync: false
+      - key: TOSS_SECRET_KEY
+        sync: false
       - key: COOKIE_SECURE
         value: "true"
       - key: DEMO_ACCOUNTS_ENABLED

@@ -12,18 +12,31 @@ export interface Broadcast {
   createdAt: string
   startedAt: string | null
   endedAt: string | null
+  /** 방송 중일 때 시청자 수 (집계 실패 시 null) */
+  viewerCount: number | null
 }
 export interface Page<T> { items: T[]; page: number; size: number; totalElements: number; totalPages: number }
 export interface Connection { serverUrl: string; token: string; roomName: string; identity: string; role: 'publisher' | 'viewer' }
 export interface Chat {
   id: number; broadcastId: number; authorId: number; authorNickname: string
   content: string; edited: boolean; createdAt: string
+  /** 화면에서 먼저 보여주고 서버 응답을 기다리는 중 */
+  pending?: boolean
 }
 export interface ChatEvent { type: 'CREATED' | 'UPDATED' | 'DELETED'; chatId: number; chat: Chat | null }
 export interface Recording {
   id: number; broadcastId: number; title: string; ownerNickname: string
   status: 'RECORDING' | 'COMPLETED' | 'FAILED'; durationMillis: number | null; videoUrl: string | null; recordedAt: string
 }
+
+export interface DonationOrder {
+  orderId: string; amount: number; orderName: string; clientKey: string; customerKey: string; customerName: string
+}
+export interface Donation {
+  id: number; broadcastId: number; donorNickname: string; streamerNickname: string
+  amount: number; message: string | null; approvedAt: string
+}
+export interface DonationSummary { totalAmount: number; count: number; recent: Donation[] }
 
 export class ApiError extends Error {
   readonly status: number
@@ -97,6 +110,12 @@ export const api = {
     request<Chat>('POST', `/api/broadcasts/${broadcastId}/chats`, { content }),
   editChat: (chatId: number, content: string) => request<Chat>('PATCH', `/api/chats/${chatId}`, { content }),
   deleteChat: (chatId: number) => request<void>('DELETE', `/api/chats/${chatId}`),
+
+  prepareDonation: (broadcastId: number, amount: number, message: string) =>
+    request<DonationOrder>('POST', `/api/broadcasts/${broadcastId}/donations`, { amount, message }),
+  confirmDonation: (paymentKey: string, orderId: string, amount: number) =>
+    request<Donation>('POST', '/api/donations/confirm', { paymentKey, orderId, amount }),
+  donations: (broadcastId: number) => request<DonationSummary>('GET', `/api/broadcasts/${broadcastId}/donations`),
 
   recordings: () => request<Recording[]>('GET', '/api/recordings'),
   recording: (id: number) => request<Recording>('GET', `/api/recordings/${id}`),

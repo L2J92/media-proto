@@ -24,10 +24,13 @@ public class ChatService {
     private final BroadcastRepository broadcastRepository;
     private final UserRepository userRepository;
     private final ApplicationEventPublisher events;
+    private final ChatRateLimiter rateLimiter;
     private final Clock clock;
 
     public ChatService(ChatMessageRepository chatRepository, BroadcastRepository broadcastRepository,
-                       UserRepository userRepository, ApplicationEventPublisher events, Clock clock) {
+                       UserRepository userRepository, ApplicationEventPublisher events,
+                       ChatRateLimiter rateLimiter, Clock clock) {
+        this.rateLimiter = rateLimiter;
         this.chatRepository = chatRepository;
         this.broadcastRepository = broadcastRepository;
         this.userRepository = userRepository;
@@ -48,6 +51,7 @@ public class ChatService {
     @Transactional
     public ChatResponse create(AuthUser user, Long broadcastId, ChatRequest req) {
         Broadcast b = findBroadcast(broadcastId);
+        rateLimiter.check(user.id());
         var author = userRepository.findById(user.id()).orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
         ChatMessage saved = chatRepository.save(new ChatMessage(b, author, req.content().strip()));
         ChatResponse res = ChatResponse.from(saved);

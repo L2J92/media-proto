@@ -47,32 +47,60 @@ export function ChatPanel({ broadcastId, room }: Props) {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
   }, [chats.length])
 
+  // 전송 즉시 입력창을 비우고 내 채팅을 먼저 보여준다. 실패하면 되돌리고 입력 내용을 복구한다.
   async function send(e: React.FormEvent) {
     e.preventDefault()
-    if (!text.trim()) return
+    const content = text.trim()
+    if (!content || !me) return
+    setText('')
+    setError('')
+    const tempId = -Date.now()
+    const temp: Chat = {
+      id: tempId, broadcastId, authorId: me.id, authorNickname: me.nickname,
+      content, edited: false, createdAt: new Date().toISOString(), pending: true,
+    }
+    setChats(prev => [...prev, temp])
     try {
-      const chat = await api.sendChat(broadcastId, text)
-      applyEvent({ type: 'CREATED', chatId: chat.id, chat })
-      setText('')
-      setError('')
-    } catch (err) { setError(errorMessage(err)) }
+      const chat = await api.sendChat(broadcastId, content)
+      setChats(prev => {
+        const without = prev.filter(c => c.id !== tempId)
+        // 실시간 이벤트가 응답보다 먼저 도착했을 수 있다
+        return without.some(c => c.id === chat.id) ? without : [...without, chat]
+      })
+    } catch (err) {
+      setChats(prev => prev.filter(c => c.id !== tempId))
+      setText(cur => cur || content)
+      setError(errorMessage(err))
+    }
   }
 
   async function saveEdit() {
     if (!editing) return
+    const target = chats.find(c => c.id === editing.id)
+    const content = editing.content.trim()
+    if (!target || !content) return
+    setEditing(null)
+    applyEvent({ type: 'UPDATED', chatId: target.id, chat: { ...target, content, edited: true } })
     try {
-      const chat = await api.editChat(editing.id, editing.content)
+      const chat = await api.editChat(target.id, content)
       applyEvent({ type: 'UPDATED', chatId: chat.id, chat })
-      setEditing(null)
-    } catch (err) { setError(errorMessage(err)) }
+    } catch (err) {
+      applyEvent({ type: 'UPDATED', chatId: target.id, chat: target })
+      setError(errorMessage(err))
+    }
   }
 
   async function remove(id: number) {
     if (!confirm('채팅을 삭제할까요?')) return
+    const index = chats.findIndex(c => c.id === id)
+    const target = chats[index]
+    applyEvent({ type: 'DELETED', chatId: id, chat: null })
     try {
       await api.deleteChat(id)
-      applyEvent({ type: 'DELETED', chatId: id, chat: null })
-    } catch (err) { setError(errorMessage(err)) }
+    } catch (err) {
+      if (target) setChats(prev => prev.some(c => c.id === id) ? prev : [...prev.slice(0, index), target, ...prev.slice(index)])
+      setError(errorMessage(err))
+    }
   }
 
   return (
@@ -81,7 +109,7 @@ export function ChatPanel({ broadcastId, room }: Props) {
       <div className="chat-list" ref={listRef}>
         {chats.length === 0 && <p className="muted small">첫 채팅을 남겨보세요.</p>}
         {chats.map(c => (
-          <div key={c.id} className="chat-item">
+          <div key={c.id} className={`chat-item${c.pending ? ' pending' : ''}`}>
             <span className="chat-author">{c.authorNickname}</span>
             {editing?.id === c.id ? (
               <span className="chat-edit">
@@ -95,7 +123,7 @@ export function ChatPanel({ broadcastId, room }: Props) {
               <>
                 <span className="chat-content">{c.content}</span>
                 {c.edited && <span className="muted small"> (수정됨)</span>}
-                {me?.id === c.authorId && (
+                {me?.id === c.authorId && !c.pending && (
                   <span className="chat-actions">
                     <button className="link" onClick={() => setEditing({ id: c.id, content: c.content })}>수정</button>
                     <button className="link" onClick={() => remove(c.id)}>삭제</button>

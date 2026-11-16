@@ -11,4 +11,10 @@ public class TestMediaConfig {
     public FakeMediaServer fakeMediaServer() {
         return new FakeMediaServer();
     }
+
+    @Bean
+    @Primary
+    public FakePaymentGateway fakePaymentGateway() {
+        return new FakePaymentGateway();
+    }
 }

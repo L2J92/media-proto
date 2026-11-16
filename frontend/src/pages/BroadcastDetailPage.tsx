@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth'
 import { StatusBadge } from '../components/StatusBadge'
 import { LivePlayer } from '../components/LivePlayer'
 import { ChatPanel } from '../components/ChatPanel'
+import { DonationBox } from '../components/DonationBox'
 import { duration, timeAgo } from '../lib/format'
 
 export function BroadcastDetailPage() {
@@ -57,6 +58,7 @@ export function BroadcastDetailPage() {
             {b.source && ` · ${b.source === 'SCREEN' ? 'PC 화면' : '카메라'} 방송`}
           </p>
           {b.description && <p className="desc">{b.description}</p>}
+          <DonationBox broadcast={b} room={room} />
           {error && <p className="error">{error}</p>}
           {isOwner && (
             <div className="owner-actions">

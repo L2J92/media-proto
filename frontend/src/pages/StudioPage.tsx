@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth'
 import { canShareScreen, isMobileDevice } from '../lib/format'
 import { StatusBadge } from '../components/StatusBadge'
 import { ChatPanel } from '../components/ChatPanel'
+import { DonationBox } from '../components/DonationBox'
 
 type Phase = 'idle' | 'ready' | 'connecting' | 'live' | 'ended'
 
@@ -28,6 +29,8 @@ export function StudioPage() {
   const [hasMic, setHasMic] = useState(false)
   const [facing, setFacing] = useState<'user' | 'environment'>('user')
   const [room, setRoom] = useState<Room | null>(null)
+  const [viewers, setViewers] = useState(0)
+  const [reconnecting, setReconnecting] = useState(false)
 
   const previewRef = useRef<HTMLVideoElement>(null)
   const streamsRef = useRef<{ video?: MediaStreamTrack; screenAudio?: MediaStreamTrack; mic?: MediaStreamTrack }>({})
@@ -158,7 +161,15 @@ export function StudioPage() {
           api.broadcast(broadcastId).then(setBroadcast).catch(() => {})
         }
       })
+      const countViewers = () => setViewers([...room.remoteParticipants.values()]
+        .filter(p => p.identity.startsWith('viewer-')).length)
+      room
+        .on(RoomEvent.ParticipantConnected, countViewers)
+        .on(RoomEvent.ParticipantDisconnected, countViewers)
+        .on(RoomEvent.Reconnecting, () => setReconnecting(true))
+        .on(RoomEvent.Reconnected, () => setReconnecting(false))
       await room.connect(conn.serverUrl, conn.token)
+      countViewers()
       roomRef.current = room
       setRoom(room)
 
@@ -229,9 +240,12 @@ export function StudioPage() {
           {phase === 'idle' && <div className="player-overlay">{source === 'SCREEN' ? '공유할 화면을 선택하세요' : '카메라를 켜세요'}</div>}
           {phase === 'ended' && <div className="player-overlay">방송이 종료되었습니다.</div>}
           {phase === 'live' && <span className="onair">● ON AIR</span>}
+          {phase === 'live' && <span className="viewers">👁 {viewers}</span>}
+          {phase === 'live' && reconnecting && <div className="player-overlay"><span className="spinner">네트워크가 불안정해 다시 연결하는 중… (송출 유지 중)</span></div>}
         </div>
 
         {error && <p className="error">{error}</p>}
+        {phase === 'live' && <DonationBox broadcast={broadcast} room={room} />}
 
         {phase !== 'ended' && (
           <div className="studio-controls">
