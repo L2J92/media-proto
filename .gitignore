@@ -12,3 +12,4 @@ backend/.idea/
 *.iml
 .vscode/
 _to_delete/
+.gh-token
