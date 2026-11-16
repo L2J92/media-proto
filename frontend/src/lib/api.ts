@@ -29,13 +29,19 @@ export interface Recording {
   status: 'RECORDING' | 'COMPLETED' | 'FAILED'; durationMillis: number | null; videoUrl: string | null; recordedAt: string
 }
 
-export interface DonationOrder {
+export interface ChargeOrder {
   orderId: string; amount: number; orderName: string; clientKey: string; customerKey: string; customerName: string
 }
 export interface Donation {
   id: number; broadcastId: number; donorNickname: string; streamerNickname: string
-  amount: number; message: string | null; approvedAt: string
+  amount: number; message: string | null; createdAt: string
 }
+export interface ChargeResult { orderId: string; chargedAmount: number; balance: number; donation: Donation | null }
+export interface PointTransaction {
+  id: number; type: 'CHARGE' | 'DONATION_SENT' | 'DONATION_RECEIVED'
+  amount: number; balanceAfter: number; description: string; createdAt: string
+}
+export interface Wallet { balance: number; transactions: PointTransaction[] }
 export interface DonationSummary { totalAmount: number; count: number; recent: Donation[] }
 
 export class ApiError extends Error {
@@ -111,10 +117,13 @@ export const api = {
   editChat: (chatId: number, content: string) => request<Chat>('PATCH', `/api/chats/${chatId}`, { content }),
   deleteChat: (chatId: number) => request<void>('DELETE', `/api/chats/${chatId}`),
 
-  prepareDonation: (broadcastId: number, amount: number, message: string) =>
-    request<DonationOrder>('POST', `/api/broadcasts/${broadcastId}/donations`, { amount, message }),
-  confirmDonation: (paymentKey: string, orderId: string, amount: number) =>
-    request<Donation>('POST', '/api/donations/confirm', { paymentKey, orderId, amount }),
+  wallet: () => request<Wallet>('GET', '/api/wallet'),
+  prepareCharge: (amount: number, donation?: { broadcastId: number; message: string }) =>
+    request<ChargeOrder>('POST', '/api/wallet/charges', { amount, donation }),
+  confirmCharge: (paymentKey: string, orderId: string, amount: number) =>
+    request<ChargeResult>('POST', '/api/wallet/charges/confirm', { paymentKey, orderId, amount }),
+  donate: (broadcastId: number, amount: number, message: string, requestId: string) =>
+    request<{ donation: Donation; balance: number }>('POST', `/api/broadcasts/${broadcastId}/donations`, { amount, message, requestId }),
   donations: (broadcastId: number) => request<DonationSummary>('GET', `/api/broadcasts/${broadcastId}/donations`),
 
   recordings: () => request<Recording[]>('GET', '/api/recordings'),

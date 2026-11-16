@@ -7,25 +7,22 @@ import com.live.common.ErrorCode;
 import com.live.user.AuthUser;
 import com.live.user.User;
 import com.live.user.UserRepository;
+import com.live.wallet.ChargeOrder;
+import com.live.wallet.WalletService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
-import java.util.UUID;
 
 import static com.live.donation.DonationDtos.*;
 
 /**
- * 후원 흐름
- * 1) prepare: 서버가 주문(orderId, 금액, 후원 대상)을 먼저 저장한다.
- * 2) 브라우저가 토스 결제창에서 결제한다.
- * 3) confirm: 서버가 주문과 금액을 대조한 뒤 결제사에 승인 요청 → 응답의 상태·금액·주문번호를 다시 검증 → 적립.
- * 4) webhook: 결제사 통지가 와도 내용을 믿지 않고 결제사에 다시 조회해 같은 방식으로 확정한다.
- * 적립은 주문 행을 잠근 상태에서 PENDING → DONE 으로 한 번만 바뀌므로, 같은 통지가 반복돼도 한 번만 반영된다.
+ * 포인트 후원. 후원 대상(방송 소유자)과 금액을 서버가 확인하고,
+ * 후원 기록 생성과 두 지갑의 포인트 이동을 한 트랜잭션에서 처리한다.
  */
 @Service
 public class DonationService {
@@ -34,121 +31,91 @@ public class DonationService {
     private final DonationRepository donationRepository;
     private final BroadcastRepository broadcastRepository;
     private final UserRepository userRepository;
-    private final PaymentGateway gateway;
+    private final WalletService walletService;
     private final ApplicationEventPublisher events;
-    private final Clock clock;
 
     public DonationService(DonationRepository donationRepository, BroadcastRepository broadcastRepository,
-                           UserRepository userRepository, PaymentGateway gateway,
-                           ApplicationEventPublisher events, Clock clock) {
+                           UserRepository userRepository, WalletService walletService,
+                           ApplicationEventPublisher events) {
         this.donationRepository = donationRepository;
         this.broadcastRepository = broadcastRepository;
         this.userRepository = userRepository;
-        this.gateway = gateway;
+        this.walletService = walletService;
         this.events = events;
-        this.clock = clock;
     }
 
     @Transactional
-    public PrepareResponse prepare(AuthUser user, Long broadcastId, PrepareRequest req) {
-        requireGateway();
+    public DonateResult donate(AuthUser user, Long broadcastId, DonateRequest req) {
+        // 같은 요청(더블 클릭, 재전송)은 처음 결과를 그대로 돌려준다.
+        var existing = donationRepository.findByRequestId(req.requestId());
+        if (existing.isPresent()) {
+            Donation d = existing.get();
+            if (!d.isDonatedBy(user.id())) throw new ApiException(ErrorCode.DUPLICATE_REQUEST);
+            return new DonateResult(DonationResponse.from(d), walletService.get(user.id()).balance());
+        }
         Broadcast b = broadcastRepository.findActiveById(broadcastId)
                 .orElseThrow(() -> new ApiException(ErrorCode.BROADCAST_NOT_FOUND));
-        if (b.isOwnedBy(user.id())) {
-            throw new ApiException(ErrorCode.CANNOT_DONATE_TO_SELF);
-        }
+        if (b.isOwnedBy(user.id())) throw new ApiException(ErrorCode.CANNOT_DONATE_TO_SELF);
         User donor = userRepository.findById(user.id()).orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
-        String orderId = "don_" + UUID.randomUUID().toString().replace("-", "");
-        String customerKey = "cust_" + UUID.randomUUID();
-        String message = req.message() == null || req.message().isBlank() ? null : req.message().strip();
-        Donation d = donationRepository.save(new Donation(b, donor, req.amount(), message, orderId, customerKey));
-        String orderName = b.getOwner().getNickname() + "님 후원";
-        return new PrepareResponse(d.getOrderId(), d.getAmount(), orderName, gateway.clientKey(),
-                d.getCustomerKey(), donor.getNickname());
+
+        Donation d;
+        try {
+            d = donationRepository.saveAndFlush(new Donation(b, donor, req.amount(), blankToNull(req.message()), req.requestId(), null));
+        } catch (DataIntegrityViolationException e) {
+            // 같은 requestId 가 동시에 들어온 경우
+            throw new ApiException(ErrorCode.DUPLICATE_REQUEST);
+        }
+        // 잔액이 부족하면 예외 → 후원 기록까지 롤백
+        long balance = walletService.transferForDonation(donor.getId(), b.getOwner().getId(), d.getAmount(), d.getId(),
+                b.getOwner().getNickname(), donor.getNickname());
+        announce(d);
+        return new DonateResult(DonationResponse.from(d), balance);
     }
 
-    /** 실패 상태 기록은 예외를 던져도 커밋되도록 롤백하지 않는다. */
-    @Transactional(noRollbackFor = ApiException.class)
-    public DonationResponse confirm(AuthUser user, ConfirmRequest req) {
-        requireGateway();
-        Donation d = donationRepository.findByOrderIdForUpdate(req.orderId())
-                .orElseThrow(() -> new ApiException(ErrorCode.DONATION_NOT_FOUND));
-        if (!d.isDonatedBy(user.id())) {
-            throw new ApiException(ErrorCode.FORBIDDEN);
+    /**
+     * "충전하고 바로 후원": 충전 확정과 같은 트랜잭션에서 호출된다.
+     * 결제 사이에 방송이 삭제됐으면 후원은 하지 않고 충전된 포인트만 남긴다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void donateFromCharge(ChargeOrder order) {
+        if (donationRepository.findByChargeOrderId(order.getId()).isPresent()) return;
+        Broadcast b = broadcastRepository.findActiveById(order.getDonationBroadcastId()).orElse(null);
+        if (b == null || b.isOwnedBy(order.getUserId())) {
+            log.info("Skip donation for charge {}: broadcast unavailable", order.getOrderId());
+            return;
         }
-        if (d.isDone()) {
-            // 새로고침 등으로 같은 승인 요청이 다시 와도 결과만 돌려준다.
-            if (req.paymentKey().equals(d.getPaymentKey())) return DonationResponse.from(d);
-            throw new ApiException(ErrorCode.DONATION_ALREADY_PROCESSED);
-        }
-        if (d.getStatus() == DonationStatus.FAILED) {
-            throw new ApiException(ErrorCode.DONATION_ALREADY_PROCESSED);
-        }
-        // 브라우저가 보낸 금액이 주문 금액과 다르면 결제사에 승인 요청조차 하지 않는다.
-        if (req.amount() != d.getAmount()) {
-            throw new ApiException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
-        }
-
-        PaymentGateway.Payment payment;
-        try {
-            payment = gateway.confirm(req.paymentKey(), d.getOrderId(), d.getAmount());
-        } catch (PaymentGateway.PaymentGatewayException e) {
-            if ("ALREADY_PROCESSED_PAYMENT".equals(e.code())) {
-                // 이미 승인된 결제(웹훅이 먼저 처리했거나 재시도) → 결제사에 조회해서 확정
-                payment = gateway.find(req.paymentKey());
-            } else if (e.clientError()) {
-                d.fail(e.code() + ": " + e.getMessage());
-                log.info("Payment rejected for order {}: {} {}", d.getOrderId(), e.code(), e.getMessage());
-                throw new ApiException(ErrorCode.PAYMENT_FAILED);
-            } else {
-                throw new ApiException(ErrorCode.PAYMENT_GATEWAY_ERROR, e);
-            }
-        }
-        verifyAndComplete(d, payment);
-        return DonationResponse.from(d);
+        User donor = userRepository.findById(order.getUserId()).orElseThrow();
+        Donation d = donationRepository.save(new Donation(b, donor, order.getAmount(), order.getDonationMessage(),
+                "charge-" + order.getOrderId(), order.getId()));
+        donationRepository.flush();
+        walletService.transferForDonation(donor.getId(), b.getOwner().getId(), d.getAmount(), d.getId(),
+                b.getOwner().getNickname(), donor.getNickname());
+        announce(d);
     }
 
-    /** 결제사 웹훅. 본문은 단서로만 쓰고, 결제사 API 로 다시 조회한 결과로 판단한다. */
-    @Transactional(noRollbackFor = ApiException.class)
-    public void onPaymentNotification(String paymentKey, String orderId) {
-        if (!gateway.isConfigured() || paymentKey == null || orderId == null) return;
-        Donation d = donationRepository.findByOrderIdForUpdate(orderId).orElse(null);
-        if (d == null || d.isDone()) return;
-        PaymentGateway.Payment payment = gateway.find(paymentKey);
-        if (!payment.isDone()) return;
-        try {
-            verifyAndComplete(d, payment);
-        } catch (ApiException e) {
-            log.warn("Webhook payment verification failed for order {}: {}", orderId, e.errorCode());
-        }
+    @Transactional(readOnly = true)
+    public DonationResponse findByChargeOrder(Long chargeOrderId) {
+        return donationRepository.findByChargeOrderId(chargeOrderId).map(DonationResponse::from).orElse(null);
     }
 
     @Transactional(readOnly = true)
     public DonationSummary summary(Long broadcastId) {
         broadcastRepository.findActiveById(broadcastId)
                 .orElseThrow(() -> new ApiException(ErrorCode.BROADCAST_NOT_FOUND));
-        var recent = donationRepository.findDone(broadcastId, PageRequest.of(0, 20)).stream()
+        var recent = donationRepository.findRecent(broadcastId, PageRequest.of(0, 20)).stream()
                 .map(DonationResponse::from).toList();
-        return new DonationSummary(donationRepository.sumDone(broadcastId), donationRepository.countDone(broadcastId), recent);
+        return new DonationSummary(donationRepository.sumByBroadcast(broadcastId),
+                donationRepository.countByBroadcastId(broadcastId), recent);
     }
 
-    private void verifyAndComplete(Donation d, PaymentGateway.Payment p) {
-        boolean valid = p.isDone()
-                && d.getOrderId().equals(p.orderId())
-                && d.getAmount() == p.totalAmount();
-        if (!valid) {
-            log.warn("Payment mismatch for order {}: status={} orderId={} amount={}", d.getOrderId(), p.status(), p.orderId(), p.totalAmount());
-            d.fail("verification failed");
-            throw new ApiException(ErrorCode.PAYMENT_FAILED);
-        }
-        boolean newlyCredited = d.complete(p.paymentKey(), p.approvedAt() != null ? p.approvedAt() : clock.instant());
-        if (newlyCredited && d.getBroadcast().isLive()) {
+    private void announce(Donation d) {
+        if (d.getBroadcast().isLive()) {
             events.publishEvent(new DonationRealtimeEvent(d.getBroadcast().getRoomName(), DonationResponse.from(d)));
         }
     }
 
-    private void requireGateway() {
-        if (!gateway.isConfigured()) throw new ApiException(ErrorCode.PAYMENT_NOT_CONFIGURED);
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s.strip();
     }
 
     public record DonationRealtimeEvent(String roomName, DonationResponse donation) {}

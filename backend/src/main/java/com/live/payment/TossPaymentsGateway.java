@@ -1,4 +1,4 @@
-package com.live.donation;
+package com.live.payment;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.http.HttpStatusCode;
@@ -22,8 +22,13 @@ public class TossPaymentsGateway implements PaymentGateway {
     private final TossPaymentsProperties props;
     private final RestClient client;
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(TossPaymentsGateway.class);
+
     public TossPaymentsGateway(TossPaymentsProperties props, RestClient.Builder builder) {
         this.props = props;
+        if (props.clientKeyLooksSecret()) {
+            log.error("TOSS_CLIENT_KEY 에 시크릿 키가 들어 있습니다. 브라우저 노출을 막기 위해 결제를 비활성화합니다. test_ck_ 로 시작하는 클라이언트 키를 넣으세요.");
+        }
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(5));
         factory.setReadTimeout(Duration.ofSeconds(30));

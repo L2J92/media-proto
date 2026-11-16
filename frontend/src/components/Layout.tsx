@@ -1,11 +1,14 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useBroadcastSession } from '../lib/broadcastSession'
+import { useWallet } from '../lib/wallet'
+import { points } from '../lib/points'
 import { LiveSessionBar } from './LiveSessionBar'
 
 export function Layout() {
   const { me, logout } = useAuth()
   const live = useBroadcastSession()
+  const wallet = useWallet()
   const navigate = useNavigate()
   return (
     <>
@@ -20,6 +23,7 @@ export function Layout() {
           {me ? (
             <>
               <Link to="/broadcasts/new" className="btn btn-primary btn-sm">방송하기</Link>
+              <Link to="/wallet" className="wallet-chip" title="내 지갑">💎 {points(wallet.balance ?? 0)}</Link>
               <span className="muted">{me.nickname}</span>
               <button className="btn btn-sm" onClick={async () => {
                 if (live.session) {

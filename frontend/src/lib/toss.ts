@@ -33,7 +33,7 @@ export function loadTossPayments(): Promise<void> {
 
 export async function requestCardPayment(order: {
   clientKey: string; customerKey: string; orderId: string; orderName: string; amount: number; customerName: string
-}, returnBroadcastId: number) {
+}, returnBroadcastId?: number) {
   await loadTossPayments()
   const toss = window.TossPayments!(order.clientKey)
   const payment = toss.payment({ customerKey: order.customerKey })
@@ -44,7 +44,8 @@ export async function requestCardPayment(order: {
     orderId: order.orderId,
     orderName: order.orderName,
     customerName: order.customerName,
-    successUrl: `${origin}/donations/success?broadcastId=${returnBroadcastId}`,
-    failUrl: `${origin}/donations/fail?broadcastId=${returnBroadcastId}`,
+    // 바로 후원이면 결제 후 그 방송으로 돌아갈 수 있게 방송 ID 를 붙인다
+    successUrl: `${origin}/wallet/charge/success${returnBroadcastId ? `?broadcastId=${returnBroadcastId}` : ''}`,
+    failUrl: `${origin}/wallet/charge/fail${returnBroadcastId ? `?broadcastId=${returnBroadcastId}` : ''}`,
   })
 }

@@ -116,3 +116,15 @@ input:focus, textarea:focus { outline: none; border-color: var(--accent); }
 .live-title { font-weight: 600; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @keyframes blink { 50% { opacity: .4; } }
 .self-preview-note { position: absolute; right: .75rem; top: .6rem; }
+
+.wallet-chip { text-decoration: none; font-size: .85rem; padding: .3rem .6rem; border: 1px solid var(--line); border-radius: 999px; background: var(--panel2); }
+.wallet-line { font-size: .9rem; display: flex; gap: .5rem; align-items: baseline; }
+.wallet-line a { color: var(--accent); }
+.success { color: var(--accent); }
+.wallet-balance { font-size: 2.2rem; font-weight: 800; color: var(--accent); margin: .5rem 0 1.25rem; }
+.tx-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: .4rem; }
+.tx-list li { display: grid; grid-template-columns: 70px 1fr auto auto; gap: .6rem; align-items: center; padding: .55rem .7rem; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font-size: .9rem; }
+.tx-type { font-size: .75rem; font-weight: 700; color: var(--muted); }
+.tx-charge { color: #9fb4ff; } .tx-donation_received { color: var(--accent); }
+.tx-plus { color: var(--accent); font-weight: 700; } .tx-minus { color: var(--danger); font-weight: 700; }
+.tx-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

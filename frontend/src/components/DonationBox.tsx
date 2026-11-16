@@ -1,26 +1,38 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { RoomEvent, type Room } from 'livekit-client'
-import { api, errorMessage, type Broadcast, type Donation, type DonationSummary } from '../lib/api'
+import { api, ApiError, errorMessage, type Broadcast, type Donation, type DonationSummary } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { useWallet } from '../lib/wallet'
+import { newRequestId, points } from '../lib/points'
 import { requestCardPayment } from '../lib/toss'
 
 const PRESETS = [1000, 5000, 10000, 50000]
-const won = (n: number) => `${n.toLocaleString('ko-KR')}원`
 
+/**
+ * 후원: 포인트가 충분하면 즉시 후원, 부족하면 "충전하고 바로 후원"(토스 결제 1회로 충전 + 후원).
+ */
 export function DonationBox({ broadcast, room }: { broadcast: Broadcast; room: Room | null }) {
   const { me } = useAuth()
+  const wallet = useWallet()
   const [summary, setSummary] = useState<DonationSummary | null>(null)
   const [open, setOpen] = useState(false)
   const [amount, setAmount] = useState(5000)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [done, setDone] = useState('')
   const [flash, setFlash] = useState<Donation | null>(null)
+  // 같은 후원 시도(더블 클릭·재시도)는 같은 requestId 로 보내 서버에서 한 번만 처리되게 한다
+  const requestIdRef = useRef(newRequestId())
 
   useEffect(() => {
     api.donations(broadcast.id).then(setSummary).catch(() => {})
   }, [broadcast.id])
+
+  const addToSummary = (d: Donation) => setSummary(prev => prev && !prev.recent.some(r => r.id === d.id)
+    ? { totalAmount: prev.totalAmount + d.amount, count: prev.count + 1, recent: [d, ...prev.recent].slice(0, 20) }
+    : prev)
 
   // 다른 시청자의 후원이 적립되면 실시간으로 합계를 갱신하고 알림을 띄운다.
   useEffect(() => {
@@ -29,9 +41,7 @@ export function DonationBox({ broadcast, room }: { broadcast: Broadcast; room: R
       if (topic !== 'donation') return
       try {
         const d = JSON.parse(new TextDecoder().decode(payload)) as Donation
-        setSummary(prev => prev && !prev.recent.some(r => r.id === d.id)
-          ? { totalAmount: prev.totalAmount + d.amount, count: prev.count + 1, recent: [d, ...prev.recent].slice(0, 20) }
-          : prev)
+        addToSummary(d)
         setFlash(d)
         setTimeout(() => setFlash(cur => (cur?.id === d.id ? null : cur)), 6000)
       } catch { /* 무시 */ }
@@ -40,21 +50,33 @@ export function DonationBox({ broadcast, room }: { broadcast: Broadcast; room: R
     return () => { room.off(RoomEvent.DataReceived, handler) }
   }, [room])
 
-  async function donate(e: React.FormEvent) {
-    e.preventDefault()
-    setBusy(true)
-    setError('')
+  const balance = wallet.balance ?? 0
+  const enough = balance >= amount
+
+  async function donateWithPoints() {
+    setBusy(true); setError(''); setDone('')
     try {
-      const order = await api.prepareDonation(broadcast.id, amount, message)
-      // 결제창으로 이동한다. 성공하면 /donations/success 로 돌아온다.
-      await requestCardPayment(order, broadcast.id)
+      const res = await api.donate(broadcast.id, amount, message, requestIdRef.current)
+      wallet.setBalance(res.balance)
+      addToSummary(res.donation)
+      setDone(`${points(res.donation.amount)} 후원했어요!`)
+      setMessage('')
+      requestIdRef.current = newRequestId() // 다음 후원은 새 요청
     } catch (err) {
-      // 사용자가 결제창을 닫은 경우도 여기로 온다
+      if (err instanceof ApiError && err.code === 'INSUFFICIENT_POINTS') wallet.refresh()
+      setError(errorMessage(err))
+    } finally { setBusy(false) }
+  }
+
+  async function chargeAndDonate() {
+    setBusy(true); setError(''); setDone('')
+    try {
+      const order = await api.prepareCharge(amount, { broadcastId: broadcast.id, message })
+      await requestCardPayment(order, broadcast.id) // 결제 후 /wallet/charge/success 로 돌아온다
+    } catch (err) {
       const msg = errorMessage(err)
       setError(msg.includes('취소') ? '' : msg)
-    } finally {
-      setBusy(false)
-    }
+    } finally { setBusy(false) }
   }
 
   const isOwner = me?.id === broadcast.owner.id
@@ -62,28 +84,31 @@ export function DonationBox({ broadcast, room }: { broadcast: Broadcast; room: R
     <div className="donation">
       {flash && (
         <div className="donation-flash" role="status">
-          💰 <b>{flash.donorNickname}</b>님이 <b>{won(flash.amount)}</b> 후원!{flash.message && <> “{flash.message}”</>}
+          💰 <b>{flash.donorNickname}</b>님이 <b>{points(flash.amount)}</b> 후원!{flash.message && <> “{flash.message}”</>}
         </div>
       )}
       <div className="donation-head">
         <div>
           <span className="muted small">누적 후원</span>{' '}
-          <b className="donation-total">{won(summary?.totalAmount ?? 0)}</b>
+          <b className="donation-total">{points(summary?.totalAmount ?? 0)}</b>
           <span className="muted small"> · {summary?.count ?? 0}건</span>
         </div>
         {!isOwner && (
           me
-            ? <button className="btn btn-primary btn-sm" onClick={() => setOpen(o => !o)}>💰 후원하기</button>
+            ? <button className="btn btn-primary btn-sm" onClick={() => { setOpen(o => !o); setDone('') }}>💰 후원하기</button>
             : <Link className="btn btn-sm" to={`/login?next=/broadcasts/${broadcast.id}`}>로그인 후 후원</Link>
         )}
       </div>
 
       {open && !isOwner && me && (
-        <form className="donation-form" onSubmit={donate}>
+        <form className="donation-form" onSubmit={e => { e.preventDefault(); if (enough) donateWithPoints(); else chargeAndDonate() }}>
+          <div className="wallet-line">
+            내 포인트 <b>{points(balance)}</b> <Link className="small" to="/wallet">충전·내역 →</Link>
+          </div>
           <div className="presets">
             {PRESETS.map(p => (
               <button type="button" key={p} className={`btn btn-sm ${amount === p ? 'btn-primary' : ''}`} onClick={() => setAmount(p)}>
-                {won(p)}
+                {points(p)}
               </button>
             ))}
             <input type="number" min={1000} max={1000000} step={1000} value={amount}
@@ -91,17 +116,27 @@ export function DonationBox({ broadcast, room }: { broadcast: Broadcast; room: R
           </div>
           <input placeholder="응원 메시지 (선택, 100자)" maxLength={100} value={message} onChange={e => setMessage(e.target.value)} />
           {error && <p className="error small">{error}</p>}
-          <button className="btn btn-primary" disabled={busy || amount < 1000}>
-            {busy ? '결제창 여는 중…' : `${won(amount)} 결제하기`}
-          </button>
-          <p className="muted small">토스페이먼츠 <b>테스트 결제</b>로 실제 돈은 나가지 않습니다.</p>
+          {done && <p className="success small">🎉 {done}</p>}
+          {enough ? (
+            <button className="btn btn-primary" disabled={busy || amount < 1000}>
+              {busy ? '후원 중…' : `${points(amount)} 후원하기`}
+            </button>
+          ) : (
+            <>
+              <button className="btn btn-primary" disabled={busy || amount < 1000}>
+                {busy ? '결제창 여는 중…' : `${amount.toLocaleString('ko-KR')}원 충전하고 바로 후원`}
+              </button>
+              <p className="muted small">포인트가 부족해요. 토스 결제 한 번으로 {points(amount)} 충전과 후원이 함께 처리됩니다.</p>
+            </>
+          )}
+          <p className="muted small">토스페이먼츠 <b>테스트 결제</b>로 실제 돈은 나가지 않습니다. (1P = 1원)</p>
         </form>
       )}
 
       {summary && summary.recent.length > 0 && (
         <ul className="donation-list">
           {summary.recent.slice(0, 5).map(d => (
-            <li key={d.id}><b>{d.donorNickname}</b> {won(d.amount)}{d.message && <span className="muted"> · {d.message}</span>}</li>
+            <li key={d.id}><b>{d.donorNickname}</b> {points(d.amount)}{d.message && <span className="muted"> · {d.message}</span>}</li>
           ))}
         </ul>
       )}

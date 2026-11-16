@@ -1,6 +1,6 @@
 package com.live;
 
-import com.live.donation.PaymentGateway;
+import com.live.payment.PaymentGateway;
 
 import java.time.Instant;
 import java.util.Map;
