@@ -51,11 +51,13 @@ export function StudioPage() {
   }, [])
 
   // 미리보기는 송출 전에는 고른 장치, 송출 중에는 세션의 영상 트랙을 보여준다.
+  // <video> 는 방송 정보를 불러온 뒤에야 그려지므로, 요소가 생기는 순간(callback ref)에 연결한다.
   const previewTrack = mySession?.videoTrack ?? null
-  useEffect(() => {
-    const el = previewRef.current
-    if (!el) return
-    if (previewTrack) el.srcObject = new MediaStream([previewTrack])
+  const attachPreview = useCallback((el: HTMLVideoElement | null) => {
+    previewRef.current = el
+    if (!el || !previewTrack) return
+    const current = el.srcObject instanceof MediaStream ? el.srcObject.getVideoTracks()[0] : undefined
+    if (current !== previewTrack) el.srcObject = new MediaStream([previewTrack])
   }, [previewTrack])
 
   // 송출을 시작하지 않고 떠나면 미리보기 장치만 정리한다.
@@ -161,7 +163,7 @@ export function StudioPage() {
         )}
 
         <div className="player">
-          <video ref={previewRef} autoPlay playsInline muted className={curSource === 'CAMERA' && curFacing === 'user' ? 'mirror' : ''} />
+          <video ref={attachPreview} autoPlay playsInline muted className={curSource === 'CAMERA' && curFacing === 'user' ? 'mirror' : ''} />
           {!isLive && !prepared && !isEnded && <div className="player-overlay">{source === 'SCREEN' ? '공유할 화면을 선택하세요' : '카메라를 켜세요'}</div>}
           {isEnded && <div className="player-overlay">{endedHere?.reason ?? '방송이 종료되었습니다.'}</div>}
           {isLive && <span className="onair">● ON AIR</span>}
