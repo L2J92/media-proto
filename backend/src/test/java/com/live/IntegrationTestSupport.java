@@ -37,11 +37,16 @@ public abstract class IntegrationTestSupport {
     protected MockHttpSession signup(String nickname) throws Exception {
         MockHttpSession session = new MockHttpSession();
         String email = UUID.randomUUID().toString().substring(0, 8) + "@test.com";
-        mvc.perform(post("/api/auth/signup").session(session).with(csrf())
+        var result = mvc.perform(post("/api/auth/signup").session(session).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(new Object[][]{{"email", email}, {"password", "password123"}, {"nickname", nickname}})))
-                .andExpect(status().isCreated());
-        return session;
+                .andExpect(status().isCreated()).andReturn();
+        return sessionAfter(result);
+    }
+
+    /** 로그인하면 세션이 새로 만들어지므로(세션 고정 방지) 응답 이후의 세션을 이어서 쓴다. */
+    protected MockHttpSession sessionAfter(org.springframework.test.web.servlet.MvcResult result) {
+        return (MockHttpSession) result.getRequest().getSession(false);
     }
 
     protected long createBroadcast(MockHttpSession session, String title) throws Exception {

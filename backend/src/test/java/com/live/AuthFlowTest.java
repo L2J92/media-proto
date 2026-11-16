@@ -14,18 +14,18 @@ class AuthFlowTest extends IntegrationTestSupport {
     @Test
     @DisplayName("회원가입 → 내 정보 → 로그아웃 → 401 → 다시 로그인")
     void signupLogoutLogin() throws Exception {
-        MockHttpSession session = new MockHttpSession();
         String signup = json(new Object[][]{{"email", "Auth@Test.com"}, {"password", "password123"}, {"nickname", "테스터"}});
-        perform(post("/api/auth/signup"), session, signup).andExpect(status().isCreated())
-                .andExpect(jsonPath("$.email").value("auth@test.com"));
+        MockHttpSession session = sessionAfter(perform(post("/api/auth/signup"), new MockHttpSession(), signup)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.email").value("auth@test.com")).andReturn());
         perform(get("/api/auth/me"), session, null).andExpect(status().isOk()).andExpect(jsonPath("$.nickname").value("테스터"));
 
         perform(post("/api/auth/logout"), session, null).andExpect(status().isNoContent());
         perform(get("/api/auth/me"), session, null).andExpect(status().isUnauthorized());
 
-        MockHttpSession again = new MockHttpSession();
-        perform(post("/api/auth/login"), again, json(new Object[][]{{"email", "auth@test.com"}, {"password", "password123"}}))
-                .andExpect(status().isOk());
+        MockHttpSession again = sessionAfter(perform(post("/api/auth/login"), new MockHttpSession(),
+                json(new Object[][]{{"email", "auth@test.com"}, {"password", "password123"}}))
+                .andExpect(status().isOk()).andReturn());
         perform(get("/api/auth/me"), again, null).andExpect(status().isOk());
     }
 
@@ -55,9 +55,22 @@ class AuthFlowTest extends IntegrationTestSupport {
 
     @Test
     void demoLoginWorks() throws Exception {
-        MockHttpSession s = new MockHttpSession();
-        perform(post("/api/auth/demo-login?account=STREAMER"), s, null).andExpect(status().isOk());
+        MockHttpSession s = sessionAfter(perform(post("/api/auth/demo-login?account=STREAMER"), new MockHttpSession(), null)
+                .andExpect(status().isOk()).andReturn());
         perform(get("/api/auth/me"), s, null).andExpect(jsonPath("$.email").value("streamer@demo.live"));
+    }
+
+    @Test
+    @DisplayName("로그인된 상태에서 다른 계정으로 로그인하면 옛 세션은 폐기되고 새 세션으로 로그인된다")
+    void switchAccountReplacesSession() throws Exception {
+        MockHttpSession first = sessionAfter(perform(post("/api/auth/demo-login?account=STREAMER"), new MockHttpSession(), null)
+                .andReturn());
+        MockHttpSession second = sessionAfter(perform(post("/api/auth/demo-login?account=VIEWER"), first, null)
+                .andExpect(status().isOk()).andReturn());
+
+        org.assertj.core.api.Assertions.assertThat(first.isInvalid()).isTrue();
+        org.assertj.core.api.Assertions.assertThat(second).isNotSameAs(first);
+        perform(get("/api/auth/me"), second, null).andExpect(jsonPath("$.email").value("viewer@demo.live"));
     }
 
     @Test
