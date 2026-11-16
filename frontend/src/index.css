@@ -109,3 +109,10 @@ input:focus, textarea:focus { outline: none; border-color: var(--accent); }
 .donation-list { list-style: none; padding: 0; margin: .7rem 0 0; font-size: .85rem; display: flex; flex-direction: column; gap: .25rem; }
 .donation-flash { position: absolute; left: 50%; top: -1rem; transform: translate(-50%, -100%); background: #ffd84d; color: #241c00; padding: .5rem 1rem; border-radius: 999px; font-size: .9rem; white-space: nowrap; box-shadow: 0 6px 20px rgba(0,0,0,.4); animation: pop .3s ease-out; z-index: 5; max-width: 95vw; overflow: hidden; text-overflow: ellipsis; }
 @keyframes pop { from { transform: translate(-50%, -80%) scale(.8); opacity: 0; } }
+
+.live-bar { position: sticky; top: 57px; z-index: 9; display: flex; align-items: center; gap: .75rem; padding: .5rem 1.25rem; background: #3a0d16; border-bottom: 1px solid var(--live); flex-wrap: wrap; }
+.live-bar .spacer { flex: 1; }
+.live-dot { color: var(--live); font-weight: 800; animation: blink 1.4s infinite; }
+.live-title { font-weight: 600; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes blink { 50% { opacity: .4; } }
+.self-preview-note { position: absolute; right: .75rem; top: .6rem; }

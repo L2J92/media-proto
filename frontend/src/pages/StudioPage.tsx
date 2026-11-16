@@ -1,107 +1,70 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Room, RoomEvent, Track, AudioPresets, VideoPresets, type LocalTrackPublication } from 'livekit-client'
-import { api, ApiError, errorMessage, type Broadcast, type BroadcastSource } from '../lib/api'
+import { api, errorMessage, type Broadcast, type BroadcastSource } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { useBroadcastSession, type MediaTracks } from '../lib/broadcastSession'
 import { canShareScreen, isMobileDevice } from '../lib/format'
 import { StatusBadge } from '../components/StatusBadge'
 import { ChatPanel } from '../components/ChatPanel'
 import { DonationBox } from '../components/DonationBox'
 
-type Phase = 'idle' | 'ready' | 'connecting' | 'live' | 'ended'
-
 /**
- * 송출 화면. 미디어(화면/카메라/마이크)를 먼저 확보한 뒤 서버에 시작을 요청하고,
- * 서버가 발급한 송출 토큰으로 미디어 서버에 접속해 트랙을 publish 한다.
+ * 송출 화면. 장치(화면/카메라/마이크)를 먼저 고른 뒤 송출을 시작하면
+ * 송출 세션이 앱 전체(BroadcastSessionProvider)로 넘어간다. 이 화면을 떠나도 방송은 계속된다.
  */
 export function StudioPage() {
   const { id } = useParams()
   const broadcastId = Number(id)
   const { me } = useAuth()
   const navigate = useNavigate()
+  const live = useBroadcastSession()
+  const mySession = live.session?.broadcast.id === broadcastId ? live.session : null
+  const otherSession = live.session && !mySession ? live.session : null
+  const endedHere = live.ended?.broadcastId === broadcastId ? live.ended : null
 
   const [broadcast, setBroadcast] = useState<Broadcast | null>(null)
   const [source, setSource] = useState<BroadcastSource>(canShareScreen() ? 'SCREEN' : 'CAMERA')
-  const [phase, setPhase] = useState<Phase>('idle')
+  const [prepared, setPrepared] = useState(false)
+  const [connecting, setConnecting] = useState(false)
   const [error, setError] = useState('')
   const [hasSystemAudio, setHasSystemAudio] = useState(false)
-  const [micMuted, setMicMuted] = useState(false)
   const [hasMic, setHasMic] = useState(false)
   const [facing, setFacing] = useState<'user' | 'environment'>('user')
-  const [room, setRoom] = useState<Room | null>(null)
-  const [viewers, setViewers] = useState(0)
-  const [reconnecting, setReconnecting] = useState(false)
 
   const previewRef = useRef<HTMLVideoElement>(null)
-  const streamsRef = useRef<{ video?: MediaStreamTrack; screenAudio?: MediaStreamTrack; mic?: MediaStreamTrack }>({})
-  const roomRef = useRef<Room | null>(null)
-  const endingRef = useRef(false)
+  /** 송출 시작 전 미리보기용 장치. 송출이 시작되면 세션으로 넘긴다. */
+  const draftRef = useRef<MediaTracks>({})
+  const onScreenEndedRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     api.broadcast(broadcastId).then(b => {
       setBroadcast(b)
-      if (b.status === 'ENDED') setPhase('ended')
       if (b.source) setSource(b.source)
     }).catch(e => setError(errorMessage(e)))
-  }, [broadcastId])
+  }, [broadcastId, endedHere])
 
-  const stopLocalTracks = useCallback(() => {
-    const s = streamsRef.current
-    ;[s.video, s.screenAudio, s.mic].forEach(t => t?.stop())
-    streamsRef.current = {}
-    if (previewRef.current) previewRef.current.srcObject = null
+  const stopDraft = useCallback(() => {
+    const d = draftRef.current
+    if (d.video && onScreenEndedRef.current) d.video.removeEventListener('ended', onScreenEndedRef.current)
+    ;[d.video, d.screenAudio, d.mic].forEach(t => t?.stop())
+    draftRef.current = {}
   }, [])
 
-  const endBroadcast = useCallback(async (reason?: string) => {
-    if (endingRef.current) return
-    endingRef.current = true
-    try {
-      const b = await api.end(broadcastId)
-      setBroadcast(b)
-    } catch (e) {
-      // 이미 종료된 경우(서버 자동 종료 등)는 무시
-      if (!(e instanceof ApiError && e.code === 'BROADCAST_NOT_LIVE')) {
-        setError(errorMessage(e))
-      }
-    } finally {
-      await roomRef.current?.disconnect()
-      roomRef.current = null
-      setRoom(null)
-      stopLocalTracks()
-      setPhase('ended')
-      if (reason) setError(reason)
-    }
-  }, [broadcastId, stopLocalTracks])
-
-  // 페이지를 떠나면 장치와 연결을 정리한다. (방송 자체는 유예 시간 뒤 서버가 자동 종료)
-  useEffect(() => () => {
-    roomRef.current?.disconnect()
-    stopLocalTracks()
-  }, [stopLocalTracks])
-
-  // 영상은 LiveKit 으로만 흐르므로 API 서버에는 요청이 없다.
-  // 무료 호스팅이 15분 무요청 시 잠들지 않도록 방송 중에는 주기적으로 상태를 조회한다.
+  // 미리보기는 송출 전에는 고른 장치, 송출 중에는 세션의 영상 트랙을 보여준다.
+  const previewTrack = mySession?.videoTrack ?? null
   useEffect(() => {
-    if (phase !== 'live') return
-    const t = setInterval(() => {
-      api.broadcast(broadcastId).then(b => {
-        setBroadcast(b)
-        if (b.status === 'ENDED') endBroadcast('서버에서 방송이 종료되었습니다.')
-      }).catch(() => {})
-    }, 4 * 60 * 1000)
-    return () => clearInterval(t)
-  }, [phase, broadcastId, endBroadcast])
+    const el = previewRef.current
+    if (!el) return
+    if (previewTrack) el.srcObject = new MediaStream([previewTrack])
+  }, [previewTrack])
 
-  useEffect(() => {
-    if (phase !== 'live') return
-    const warn = (e: BeforeUnloadEvent) => { e.preventDefault() }
-    window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
-  }, [phase])
+  // 송출을 시작하지 않고 떠나면 미리보기 장치만 정리한다.
+  useEffect(() => () => stopDraft(), [stopDraft])
 
   async function prepareMedia() {
     setError('')
-    stopLocalTracks()
+    stopDraft()
+    setPrepared(false)
     try {
       if (source === 'SCREEN') {
         const display = await navigator.mediaDevices.getDisplayMedia({
@@ -114,29 +77,27 @@ export function StudioPage() {
         const video = display.getVideoTracks()[0]
         const screenAudio = display.getAudioTracks()[0]
         const mic = await getMic()
-        streamsRef.current = { video, screenAudio, mic }
+        draftRef.current = { video, screenAudio, mic }
         setHasSystemAudio(!!screenAudio)
         setHasMic(!!mic)
-        // 브라우저의 "공유 중지"를 누르면 방송을 끝낸다.
-        video.addEventListener('ended', () => {
-          if (roomRef.current) endBroadcast('화면 공유가 중지되어 방송을 종료했습니다.')
-          else { stopLocalTracks(); setPhase('idle') }
-        })
+        // 송출 시작 전에 공유를 멈추면 다시 고르게 한다.
+        onScreenEndedRef.current = () => { stopDraft(); setPrepared(false) }
+        video.addEventListener('ended', onScreenEndedRef.current)
       } else {
         const cam = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: { echoCancellation: true, noiseSuppression: true },
         })
-        streamsRef.current = { video: cam.getVideoTracks()[0], mic: cam.getAudioTracks()[0] }
+        draftRef.current = { video: cam.getVideoTracks()[0], mic: cam.getAudioTracks()[0] }
         setHasSystemAudio(false)
         setHasMic(cam.getAudioTracks().length > 0)
       }
-      if (previewRef.current && streamsRef.current.video) {
-        previewRef.current.srcObject = new MediaStream([streamsRef.current.video])
+      if (previewRef.current && draftRef.current.video) {
+        previewRef.current.srcObject = new MediaStream([draftRef.current.video])
       }
-      setPhase('ready')
+      setPrepared(true)
     } catch (e) {
-      stopLocalTracks()
+      stopDraft()
       setError(mediaErrorMessage(e))
     }
   }
@@ -144,80 +105,32 @@ export function StudioPage() {
   async function goLive() {
     if (!broadcast) return
     setError('')
-    setPhase('connecting')
-    endingRef.current = false
+    setConnecting(true)
+    const tracks = draftRef.current
+    // 장치 소유권을 세션으로 넘긴다(이 화면이 사라져도 멈추지 않게)
+    if (tracks.video && onScreenEndedRef.current) tracks.video.removeEventListener('ended', onScreenEndedRef.current)
+    draftRef.current = {}
     try {
-      const conn = broadcast.status === 'LIVE'
-        ? await api.publisherToken(broadcastId)   // 새로고침 후 재접속
-        : await api.start(broadcastId, source)
-      const room = new Room({ adaptiveStream: false, dynacast: true, publishDefaults: { simulcast: true } })
-      room.on(RoomEvent.Disconnected, () => {
-        // 서버가 방을 정리한 경우(종료/자동 종료)
-        if (!endingRef.current) {
-          roomRef.current = null
-          setRoom(null)
-          stopLocalTracks()
-          setPhase('ended')
-          api.broadcast(broadcastId).then(setBroadcast).catch(() => {})
-        }
-      })
-      const countViewers = () => setViewers([...room.remoteParticipants.values()]
-        .filter(p => p.identity.startsWith('viewer-')).length)
-      room
-        .on(RoomEvent.ParticipantConnected, countViewers)
-        .on(RoomEvent.ParticipantDisconnected, countViewers)
-        .on(RoomEvent.Reconnecting, () => setReconnecting(true))
-        .on(RoomEvent.Reconnected, () => setReconnecting(false))
-      await room.connect(conn.serverUrl, conn.token)
-      countViewers()
-      roomRef.current = room
-      setRoom(room)
-
-      const { video, screenAudio, mic } = streamsRef.current
-      if (video) {
-        await room.localParticipant.publishTrack(video, source === 'SCREEN'
-          ? { source: Track.Source.ScreenShare, videoEncoding: { maxBitrate: 3_000_000, maxFramerate: 30 }, simulcast: false }
-          : { source: Track.Source.Camera, videoEncoding: VideoPresets.h720.encoding })
-      }
-      if (screenAudio) {
-        await room.localParticipant.publishTrack(screenAudio, {
-          source: Track.Source.ScreenShareAudio, audioPreset: AudioPresets.musicHighQualityStereo, dtx: false, red: false,
-        })
-      }
-      if (mic) {
-        await room.localParticipant.publishTrack(mic, { source: Track.Source.Microphone })
-      }
-      setBroadcast(await api.broadcast(broadcastId))
-      setPhase('live')
+      await live.goLive(broadcast, source, tracks, facing)
+      setPrepared(false)
     } catch (e) {
+      draftRef.current = tracks // 실패하면 다시 미리보기 상태로
       setError(errorMessage(e))
-      await roomRef.current?.disconnect()
-      roomRef.current = null
-      setRoom(null)
-      setPhase('ready')
       api.broadcast(broadcastId).then(setBroadcast).catch(() => {})
+    } finally {
+      setConnecting(false)
     }
   }
 
-  function toggleMic() {
-    const mic = streamsRef.current.mic
-    if (!mic) return
-    mic.enabled = !mic.enabled
-    setMicMuted(!mic.enabled)
-  }
-
-  async function switchCamera() {
+  async function switchDraftCamera() {
     const next = facing === 'user' ? 'environment' : 'user'
     setFacing(next)
-    if (source !== 'CAMERA' || !streamsRef.current.video) return
+    if (!draftRef.current.video) return
     try {
       const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: next, width: { ideal: 1280 }, height: { ideal: 720 } } })
-      const newTrack = s.getVideoTracks()[0]
-      const pub: LocalTrackPublication | undefined = roomRef.current?.localParticipant.getTrackPublication(Track.Source.Camera)
-      if (pub?.track) await pub.track.replaceTrack(newTrack)
-      streamsRef.current.video?.stop()
-      streamsRef.current.video = newTrack
-      if (previewRef.current) previewRef.current.srcObject = new MediaStream([newTrack])
+      draftRef.current.video.stop()
+      draftRef.current.video = s.getVideoTracks()[0]
+      if (previewRef.current) previewRef.current.srcObject = new MediaStream([draftRef.current.video])
     } catch (e) { setError(mediaErrorMessage(e)) }
   }
 
@@ -226,88 +139,109 @@ export function StudioPage() {
     return <p className="error">방송 소유자만 송출할 수 있습니다. <Link to={`/broadcasts/${broadcastId}`}>시청하러 가기</Link></p>
   }
 
+  const isLive = !!mySession
+  const isEnded = !isLive && (broadcast.status === 'ENDED' || !!endedHere)
+  const curSource = mySession?.source ?? source
+  const curFacing = mySession?.facing ?? facing
   const mobile = isMobileDevice()
+
   return (
     <div className="watch">
       <section className="watch-main">
         <div className="studio-head">
-          <h1>{broadcast.title} <StatusBadge status={broadcast.status} /></h1>
+          <h1>{broadcast.title} <StatusBadge status={isLive ? 'LIVE' : isEnded ? 'ENDED' : broadcast.status} /></h1>
           <Link to={`/broadcasts/${broadcastId}`} className="muted small">시청 화면 보기 →</Link>
         </div>
 
+        {otherSession && (
+          <p className="error">
+            다른 방송(“{otherSession.broadcast.title}”)을 송출 중입니다.{' '}
+            <Link to={`/broadcasts/${otherSession.broadcast.id}/studio`}>그 방송으로 이동</Link>
+          </p>
+        )}
+
         <div className="player">
-          <video ref={previewRef} autoPlay playsInline muted className={source === 'CAMERA' && facing === 'user' ? 'mirror' : ''} />
-          {phase === 'idle' && <div className="player-overlay">{source === 'SCREEN' ? '공유할 화면을 선택하세요' : '카메라를 켜세요'}</div>}
-          {phase === 'ended' && <div className="player-overlay">방송이 종료되었습니다.</div>}
-          {phase === 'live' && <span className="onair">● ON AIR</span>}
-          {phase === 'live' && <span className="viewers">👁 {viewers}</span>}
-          {phase === 'live' && reconnecting && <div className="player-overlay"><span className="spinner">네트워크가 불안정해 다시 연결하는 중… (송출 유지 중)</span></div>}
+          <video ref={previewRef} autoPlay playsInline muted className={curSource === 'CAMERA' && curFacing === 'user' ? 'mirror' : ''} />
+          {!isLive && !prepared && !isEnded && <div className="player-overlay">{source === 'SCREEN' ? '공유할 화면을 선택하세요' : '카메라를 켜세요'}</div>}
+          {isEnded && <div className="player-overlay">{endedHere?.reason ?? '방송이 종료되었습니다.'}</div>}
+          {isLive && <span className="onair">● ON AIR</span>}
+          {isLive && <span className="viewers">👁 {mySession.viewers}</span>}
+          {isLive && mySession.reconnecting && <div className="player-overlay"><span className="spinner">네트워크가 불안정해 다시 연결하는 중… (송출 유지 중)</span></div>}
         </div>
 
         {error && <p className="error">{error}</p>}
-        {phase === 'live' && <DonationBox broadcast={broadcast} room={room} />}
+        {isLive && <DonationBox broadcast={broadcast} room={mySession.room} />}
 
-        {phase !== 'ended' && (
+        {!isEnded && !otherSession && (
           <div className="studio-controls">
-            {(phase === 'idle' || phase === 'ready') && broadcast.status !== 'LIVE' && (
+            {!isLive && broadcast.status !== 'LIVE' && (
               <div className="segmented">
-                <button className={source === 'SCREEN' ? 'on' : ''} disabled={!canShareScreen()}
-                  onClick={() => { setSource('SCREEN'); stopLocalTracks(); setPhase('idle') }}>
+                <button className={source === 'SCREEN' ? 'on' : ''} disabled={!canShareScreen() || connecting}
+                  onClick={() => { setSource('SCREEN'); stopDraft(); setPrepared(false) }}>
                   🖥 PC 화면 공유
                 </button>
-                <button className={source === 'CAMERA' ? 'on' : ''}
-                  onClick={() => { setSource('CAMERA'); stopLocalTracks(); setPhase('idle') }}>
+                <button className={source === 'CAMERA' ? 'on' : ''} disabled={connecting}
+                  onClick={() => { setSource('CAMERA'); stopDraft(); setPrepared(false) }}>
                   📷 카메라
                 </button>
               </div>
             )}
-
-            {(phase === 'idle' || phase === 'ready') && (
+            {!isLive && !connecting && (
               <button className="btn" onClick={prepareMedia}>
-                {phase === 'ready' ? '다시 선택' : source === 'SCREEN' ? '화면·마이크 선택' : '카메라·마이크 켜기'}
+                {prepared ? '다시 선택' : source === 'SCREEN' ? '화면·마이크 선택' : '카메라·마이크 켜기'}
               </button>
             )}
-            {phase === 'ready' && (
+            {!isLive && prepared && !connecting && (
               <button className="btn btn-primary" onClick={goLive}>
                 {broadcast.status === 'LIVE' ? '방송 다시 연결' : '방송 시작'}
               </button>
             )}
-            {phase === 'connecting' && <button className="btn" disabled>연결 중…</button>}
-            {phase === 'live' && (
-              <>
-                <button className="btn" onClick={toggleMic}>{micMuted ? '🎙 마이크 켜기' : '🔇 마이크 끄기'}</button>
-                {source === 'CAMERA' && <button className="btn" onClick={switchCamera}>🔄 카메라 전환</button>}
-                <button className="btn btn-danger" onClick={() => { if (confirm('방송을 종료할까요?')) endBroadcast() }}>방송 종료</button>
-              </>
+            {!isLive && source === 'CAMERA' && prepared && !connecting && (
+              <button className="btn" onClick={switchDraftCamera}>🔄 {facing === 'user' ? '후면' : '전면'} 카메라</button>
             )}
-            {source === 'CAMERA' && phase === 'ready' && (
-              <button className="btn" onClick={switchCamera}>🔄 {facing === 'user' ? '후면' : '전면'} 카메라</button>
+            {connecting && <button className="btn" disabled><span className="spinner">연결 중…</span></button>}
+            {isLive && (
+              <>
+                <button className="btn" onClick={live.toggleMic} disabled={!mySession.hasMic}>
+                  {mySession.micMuted ? '🎙 마이크 켜기' : '🔇 마이크 끄기'}
+                </button>
+                {mySession.source === 'CAMERA' && (
+                  <button className="btn" onClick={() => live.switchCamera().catch(e => setError(mediaErrorMessage(e)))}>🔄 카메라 전환</button>
+                )}
+                <button className="btn btn-danger" onClick={() => { if (confirm('방송을 종료할까요?')) live.end() }}>방송 종료</button>
+              </>
             )}
           </div>
         )}
 
-        {phase === 'ended' && (
+        {isEnded && (
           <div className="studio-controls">
             <button className="btn btn-primary" onClick={() => navigate('/broadcasts/new')}>새 방송 만들기</button>
             <Link className="btn" to={`/broadcasts/${broadcastId}`}>방송 상세</Link>
           </div>
         )}
 
-        {source === 'SCREEN' && phase !== 'ended' && (
+        {curSource === 'SCREEN' && !isEnded && (
           <ul className="hint">
             <li>탭을 공유할 때 <b>“탭 오디오도 공유”</b>, 전체 화면은 <b>“시스템 오디오 공유”</b>를 켜면 소리가 함께 송출됩니다. (Chrome/Edge 권장)</li>
             <li>시스템 소리는 Windows Chrome/Edge 전체 화면 공유에서만 지원됩니다. macOS는 탭 오디오를 이용하세요.</li>
-            {phase !== 'idle' && <li>화면 소리: <b>{hasSystemAudio ? '함께 송출' : '없음'}</b> · 마이크: <b>{hasMic ? '켜짐' : '없음'}</b></li>}
+            {(prepared || isLive) && (
+              <li>화면 소리: <b>{(mySession?.hasSystemAudio ?? hasSystemAudio) ? '함께 송출' : '없음'}</b> · 마이크: <b>{(mySession?.hasMic ?? hasMic) ? '켜짐' : '없음'}</b></li>
+            )}
           </ul>
         )}
-        {source === 'CAMERA' && mobile && phase === 'idle' && (
-          <ul className="hint"><li>카메라·마이크 권한을 허용해 주세요. 방송 중에는 화면을 켜 둔 상태로 유지해야 합니다.</li></ul>
+        {curSource === 'CAMERA' && mobile && !isLive && !isEnded && (
+          <ul className="hint"><li>카메라·마이크 권한을 허용해 주세요.</li></ul>
         )}
-        {phase === 'live' && (
-          <ul className="hint"><li>연결이 잠시 끊겨도 자동 재연결됩니다. 오래 끊기면 서버가 방송을 자동 종료합니다.</li></ul>
+        {isLive && (
+          <ul className="hint">
+            <li><b>이 화면을 떠나 사이트 안의 다른 페이지로 이동해도 방송은 계속됩니다.</b> 상단 빨간 바에서 다시 돌아올 수 있어요.</li>
+            <li>탭을 닫거나 새로고침하면 송출이 끊기고, 45초 안에 돌아와 “방송 다시 연결”을 누르지 않으면 자동 종료됩니다.</li>
+            {mySession.source === 'CAMERA' && <li>휴대폰에서 다른 앱으로 전환하면 카메라가 잠시 멈추고, 돌아오면 자동으로 다시 송출합니다.</li>}
+          </ul>
         )}
       </section>
-      {(phase === 'live' || broadcast.status === 'LIVE') && <ChatPanel broadcastId={broadcastId} room={room} />}
+      {(isLive || broadcast.status === 'LIVE') && <ChatPanel broadcastId={broadcastId} room={mySession?.room ?? null} />}
     </div>
   )
 }

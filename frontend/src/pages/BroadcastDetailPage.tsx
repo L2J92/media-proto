@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import type { Room } from 'livekit-client'
 import { api, errorMessage, type Broadcast, type Recording } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { useBroadcastSession } from '../lib/broadcastSession'
 import { StatusBadge } from '../components/StatusBadge'
 import { LivePlayer } from '../components/LivePlayer'
 import { ChatPanel } from '../components/ChatPanel'
@@ -16,7 +17,12 @@ export function BroadcastDetailPage() {
   const navigate = useNavigate()
   const [b, setB] = useState<Broadcast | null>(null)
   const [recordings, setRecordings] = useState<Recording[]>([])
-  const [room, setRoom] = useState<Room | null>(null)
+  const [viewerRoom, setRoom] = useState<Room | null>(null)
+  const live = useBroadcastSession()
+  // 내가 지금 송출 중인 방송이면 시청자로 접속하지 않는다(내 마이크 소리가 스피커로 되돌아오는 것 방지)
+  const mySession = live.session?.broadcast.id === broadcastId ? live.session : null
+  const room = mySession?.room ?? viewerRoom
+  const endedHere = live.ended?.broadcastId === broadcastId
   const [error, setError] = useState('')
 
   const load = useCallback(() => {
@@ -24,7 +30,7 @@ export function BroadcastDetailPage() {
     api.broadcastRecordings(broadcastId).then(setRecordings).catch(() => {})
   }, [broadcastId])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [load, endedHere])
 
   // 대기 중인 방송은 시작되면 자동으로 플레이어를 띄운다.
   useEffect(() => {
@@ -44,7 +50,9 @@ export function BroadcastDetailPage() {
   return (
     <div className="watch">
       <section className="watch-main">
-        {b.status === 'LIVE' ? (
+        {mySession ? (
+          <SelfPreview track={mySession.videoTrack} viewers={mySession.viewers} studioPath={`/broadcasts/${b.id}/studio`} />
+        ) : b.status === 'LIVE' ? (
           <LivePlayer broadcastId={broadcastId} onRoom={setRoom} onEnded={load} />
         ) : (
           <div className="player"><div className="player-overlay">
@@ -82,6 +90,22 @@ export function BroadcastDetailPage() {
         </div>
       </section>
       <ChatPanel broadcastId={broadcastId} room={room} />
+    </div>
+  )
+}
+
+/** 송출자 본인이 상세 화면을 볼 때: 로컬 영상만 소리 없이 보여준다. */
+function SelfPreview({ track, viewers, studioPath }: { track: MediaStreamTrack | null; viewers: number; studioPath: string }) {
+  const ref = useRef<HTMLVideoElement>(null)
+  useEffect(() => {
+    if (ref.current && track) ref.current.srcObject = new MediaStream([track])
+  }, [track])
+  return (
+    <div className="player">
+      <video ref={ref} autoPlay playsInline muted />
+      <span className="onair">● ON AIR</span>
+      <span className="viewers">👁 {viewers}</span>
+      <Link className="btn btn-sm self-preview-note" to={studioPath}>내 송출 미리보기 · 스튜디오로</Link>
     </div>
   )
 }
