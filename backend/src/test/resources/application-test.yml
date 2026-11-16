@@ -1,0 +1,12 @@
+spring:
+  # 테스트는 MockHttpSession 으로 로그인 상태를 이어간다. JDBC 세션(SESSION 쿠키)은 끈다.
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.session.SessionAutoConfiguration
+  datasource:
+    url: jdbc:h2:mem:test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+livekit:
+  url: wss://fake.livekit.test
+  api-key: test-key
+  api-secret: test-secret-test-secret-test-secret
+broadcast:
+  presence-check-interval: 1h

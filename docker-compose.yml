@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: live
+      POSTGRES_USER: live
+      POSTGRES_PASSWORD: live
+    ports: ["5432:5432"]
+    volumes: [dbdata:/var/lib/postgresql/data]
+  app:
+    build: .
+    env_file: .env
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/live
+      DB_USERNAME: live
+      DB_PASSWORD: live
+    ports: ["8080:8080"]
+    depends_on: [db]
+volumes:
+  dbdata:

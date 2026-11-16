@@ -1,0 +1,14 @@
+node_modules/
+frontend/dist/
+backend/build/
+backend/.gradle/
+backend/data/
+backend/src/main/resources/static/
+.env
+*.log
+.idea/
+.DS_Store
+backend/.idea/
+*.iml
+.vscode/
+_to_delete/

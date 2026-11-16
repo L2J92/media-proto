@@ -1,0 +1,113 @@
+export type BroadcastStatus = 'READY' | 'LIVE' | 'ENDED'
+export type BroadcastSource = 'SCREEN' | 'CAMERA'
+
+export interface Me { id: number; email: string; nickname: string }
+export interface Broadcast {
+  id: number
+  title: string
+  description: string | null
+  status: BroadcastStatus
+  source: BroadcastSource | null
+  owner: { id: number; nickname: string }
+  createdAt: string
+  startedAt: string | null
+  endedAt: string | null
+}
+export interface Page<T> { items: T[]; page: number; size: number; totalElements: number; totalPages: number }
+export interface Connection { serverUrl: string; token: string; roomName: string; identity: string; role: 'publisher' | 'viewer' }
+export interface Chat {
+  id: number; broadcastId: number; authorId: number; authorNickname: string
+  content: string; edited: boolean; createdAt: string
+}
+export interface ChatEvent { type: 'CREATED' | 'UPDATED' | 'DELETED'; chatId: number; chat: Chat | null }
+export interface Recording {
+  id: number; broadcastId: number; title: string; ownerNickname: string
+  status: 'RECORDING' | 'COMPLETED' | 'FAILED'; durationMillis: number | null; videoUrl: string | null; recordedAt: string
+}
+
+export class ApiError extends Error {
+  readonly status: number
+  readonly code: string
+  readonly fieldErrors: Record<string, string>
+  constructor(status: number, code: string, message: string, fieldErrors: Record<string, string> = {}) {
+    super(message)
+    this.status = status
+    this.code = code
+    this.fieldErrors = fieldErrors
+  }
+}
+
+function csrfToken(): string | null {
+  const m = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/)
+  return m ? decodeURIComponent(m[1]) : null
+}
+
+async function ensureCsrf() {
+  // 첫 방문에는 쿠키가 없으므로 아무 GET 요청으로 발급받는다.
+  if (!csrfToken()) await fetch('/api/broadcasts?size=1', { credentials: 'same-origin' })
+}
+
+async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = { Accept: 'application/json' }
+  if (method !== 'GET') {
+    await ensureCsrf()
+    const token = csrfToken()
+    if (token) headers['X-XSRF-TOKEN'] = token
+  }
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  const res = await fetch(url, {
+    method,
+    headers,
+    credentials: 'same-origin',
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (res.status === 204) return undefined as T
+  const data = await res.json().catch(() => null)
+  if (!res.ok) {
+    throw new ApiError(res.status, data?.code ?? 'UNKNOWN', data?.message ?? '요청에 실패했습니다.', data?.fieldErrors ?? {})
+  }
+  return data as T
+}
+
+export const api = {
+  me: () => request<Me>('GET', '/api/auth/me'),
+  signup: (email: string, password: string, nickname: string) =>
+    request<Me>('POST', '/api/auth/signup', { email, password, nickname }),
+  login: (email: string, password: string) => request<Me>('POST', '/api/auth/login', { email, password }),
+  demoLogin: (account: 'STREAMER' | 'STREAMER2' | 'VIEWER') =>
+    request<Me>('POST', `/api/auth/demo-login?account=${account}`),
+  logout: () => request<void>('POST', '/api/auth/logout'),
+
+  broadcasts: (status?: BroadcastStatus, page = 0) =>
+    request<Page<Broadcast>>('GET', `/api/broadcasts?page=${page}${status ? `&status=${status}` : ''}`),
+  myBroadcasts: () => request<Broadcast[]>('GET', '/api/broadcasts/mine'),
+  broadcast: (id: number) => request<Broadcast>('GET', `/api/broadcasts/${id}`),
+  createBroadcast: (title: string, description: string) =>
+    request<Broadcast>('POST', '/api/broadcasts', { title, description }),
+  updateBroadcast: (id: number, title: string, description: string) =>
+    request<Broadcast>('PATCH', `/api/broadcasts/${id}`, { title, description }),
+  deleteBroadcast: (id: number) => request<void>('DELETE', `/api/broadcasts/${id}`),
+  start: (id: number, source: BroadcastSource) => request<Connection>('POST', `/api/broadcasts/${id}/start`, { source }),
+  publisherToken: (id: number) => request<Connection>('POST', `/api/broadcasts/${id}/publisher-token`),
+  end: (id: number) => request<Broadcast>('POST', `/api/broadcasts/${id}/end`),
+  viewerToken: (id: number) => request<Connection>('GET', `/api/broadcasts/${id}/viewer-token`),
+
+  chats: (broadcastId: number) => request<Chat[]>('GET', `/api/broadcasts/${broadcastId}/chats`),
+  sendChat: (broadcastId: number, content: string) =>
+    request<Chat>('POST', `/api/broadcasts/${broadcastId}/chats`, { content }),
+  editChat: (chatId: number, content: string) => request<Chat>('PATCH', `/api/chats/${chatId}`, { content }),
+  deleteChat: (chatId: number) => request<void>('DELETE', `/api/chats/${chatId}`),
+
+  recordings: () => request<Recording[]>('GET', '/api/recordings'),
+  recording: (id: number) => request<Recording>('GET', `/api/recordings/${id}`),
+  broadcastRecordings: (broadcastId: number) => request<Recording[]>('GET', `/api/broadcasts/${broadcastId}/recordings`),
+}
+
+export function errorMessage(e: unknown): string {
+  if (e instanceof ApiError) {
+    const fields = Object.values(e.fieldErrors)
+    return fields.length ? fields.join(' ') : e.message
+  }
+  if (e instanceof Error) return e.message
+  return '알 수 없는 오류가 발생했습니다.'
+}

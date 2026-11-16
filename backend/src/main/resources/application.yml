@@ -1,0 +1,63 @@
+spring:
+  application:
+    name: live-platform
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:h2:file:./data/live;MODE=PostgreSQL;AUTO_SERVER=TRUE}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
+    hikari:
+      # 무료 DB(Neon) 연결 수 제한에 맞춰 작게 유지
+      maximum-pool-size: ${DB_POOL_SIZE:5}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        default_batch_fetch_size: 100
+  session:
+    jdbc:
+      initialize-schema: always
+    timeout: 7d
+
+server:
+  port: ${PORT:8080}
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${COOKIE_SECURE:false}
+
+livekit:
+  url: ${LIVEKIT_URL:}
+  api-key: ${LIVEKIT_API_KEY:}
+  api-secret: ${LIVEKIT_API_SECRET:}
+
+broadcast:
+  # 송출자 연결이 끊긴 뒤 자동 종료까지 기다리는 시간
+  publisher-grace-period: ${PUBLISHER_GRACE_PERIOD:45s}
+  presence-check-interval: 15s
+
+recording:
+  enabled: ${RECORDING_ENABLED:false}
+  s3:
+    access-key: ${S3_ACCESS_KEY:}
+    secret: ${S3_SECRET:}
+    region: ${S3_REGION:auto}
+    endpoint: ${S3_ENDPOINT:}
+    bucket: ${S3_BUCKET:}
+    public-base-url: ${S3_PUBLIC_BASE_URL:}
+
+app:
+  demo-accounts-enabled: ${DEMO_ACCOUNTS_ENABLED:true}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
