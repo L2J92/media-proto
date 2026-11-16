@@ -74,9 +74,12 @@ public class AuthController {
     }
 
     private void establishSession(AuthUser user, HttpServletRequest request, HttpServletResponse response) {
-        // 세션 고정 공격 방지: 기존 세션이 있으면 ID를 바꾼다.
-        if (request.getSession(false) != null) {
-            request.changeSessionId();
+        // 세션 고정 공격 방지: 기존 세션은 폐기하고 새 세션을 만든다.
+        // (changeSessionId 는 JDBC 세션에서 같은 행의 ID 를 UPDATE 하는데, 직전 요청의 세션 저장과 겹치면
+        //  옛 ID 로 되돌아가 방금 로그인한 세션이 사라지는 경우가 있었다. 행을 지우고 새로 만들면 겹칠 일이 없다.)
+        var old = request.getSession(false);
+        if (old != null) {
+            old.invalidate();
         }
         var auth = UsernamePasswordAuthenticationToken.authenticated(user, null, AuthorityUtils.createAuthorityList("ROLE_USER"));
         SecurityContext context = SecurityContextHolder.createEmptyContext();
