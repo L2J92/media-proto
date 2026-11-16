@@ -2,6 +2,7 @@ package com.live.user;
 
 import com.live.common.ApiException;
 import com.live.common.ErrorCode;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -11,8 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ApplicationEventPublisher events;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, ApplicationEventPublisher events) {
+        this.events = events;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
     }
@@ -26,6 +29,7 @@ public class AuthService {
         try {
             User user = userRepository.saveAndFlush(
                     new User(email, passwordEncoder.encode(req.password()), req.nickname().strip()));
+            events.publishEvent(new UserRegisteredEvent(user.getId()));
             return AuthUser.from(user);
         } catch (DataIntegrityViolationException e) {
             // 동시 가입 요청으로 unique 제약에 걸린 경우
@@ -46,9 +50,12 @@ public class AuthService {
     /** 평가용 데모 계정. 없으면 만들고 로그인 정보로 돌려준다. */
     @Transactional
     public AuthUser demoUser(DemoAccount account) {
-        User user = userRepository.findByEmail(account.email()).orElseGet(() ->
-                userRepository.save(new User(account.email(),
-                        passwordEncoder.encode(java.util.UUID.randomUUID().toString()), account.nickname())));
+        User user = userRepository.findByEmail(account.email()).orElseGet(() -> {
+            User created = userRepository.saveAndFlush(new User(account.email(),
+                    passwordEncoder.encode(java.util.UUID.randomUUID().toString()), account.nickname()));
+            events.publishEvent(new UserRegisteredEvent(created.getId()));
+            return created;
+        });
         return AuthUser.from(user);
     }
 
