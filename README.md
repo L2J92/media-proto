@@ -4,7 +4,7 @@ PC 화면 공유(탭·시스템 소리 + 마이크)와 휴대폰 카메라로 �
 
 | 항목 | 내용 |
 |---|---|
-| 서비스 주소 | **https://(배포 후 기입).onrender.com** |
+| 서비스 주소 | **https://live-platform-mo19.onrender.com** |
 | 시연 영상 | **(링크 기입)** — PC 송출·시청·종료 / 모바일 송출·시청·종료 |
 | 테스트 계정 | 로그인 화면의 **[방송자 계정] [방송자2 계정] [시청자 계정]** 버튼으로 비밀번호 없이 바로 로그인 |
 
@@ -23,6 +23,7 @@ PC 화면 공유(탭·시스템 소리 + 마이크)와 휴대폰 카메라로 �
    - 마이크 권한 허용
 4. 미리보기 확인 후 **방송 시작** → `● ON AIR` 표시
 5. **다른 기기(휴대폰 등)**에서 서비스 주소 접속 → 방송 목록의 `LIVE` 방송 클릭 → 영상 재생, **🔊 소리 켜기** 클릭 시 화면 소리 + 마이크 음성 재생
+   - 플레이어에서 시청자 수(👁), 볼륨·음소거, 전체 화면을 사용할 수 있고, 네트워크가 끊기면 “다시 연결하는 중” 표시 후 자동 복구됩니다.
 6. 송출 화면에서 **방송 종료** → 시청 화면이 “방송이 종료되었습니다”로 바뀌고 목록에서 `종료` 상태로 표시
    - 브라우저의 “공유 중지”를 눌러도 방송이 종료됩니다.
 
@@ -44,8 +45,17 @@ PC 화면 공유(탭·시스템 소리 + 마이크)와 휴대폰 카메라로 �
 | 서버 재시작 후 | 방송 정보·채팅·로그인 세션 유지 (PostgreSQL 저장) |
 
 ### 1-4. 채팅 (선택 요구사항 · 댓글)
-- 로그인 사용자는 방송별로 채팅을 작성하고, **본인 채팅만** 수정·삭제할 수 있습니다.
+- 로그인 사용자는 방송별로 채팅을 작성하고, **본인 채팅만** 수정·삭제할 수 있습니다. (서버에서 작성자 검증, 남의 채팅은 `403`)
 - 방송 중에는 다른 시청자 화면에 실시간으로 반영되고, 종료된 방송에서는 댓글처럼 조회·작성됩니다.
+- 전송 즉시 입력창이 비워지고 내 메시지가 먼저 표시됩니다(실패 시 되돌리고 입력 복구). 5초에 5개 초과 시 도배 방지(`429`).
+
+### 1-5. 도네이션 (선택 요구사항 · 토스페이먼츠 테스트 결제)
+1. **[시청자 계정]**으로 로그인 → 방송 상세 화면의 **💰 후원하기**
+2. 금액(1,000원~)과 응원 메시지 입력 → **결제하기** → 토스 결제창에서 카드 결제
+   - 테스트 모드라 실제 결제되지 않습니다. 카드 번호는 임의 값으로 진행할 수 있습니다.
+3. 결제 후 **후원 완료** 화면 → 방송으로 돌아가면 **누적 후원 금액·건수·최근 후원 목록** 표시
+4. 방송 중이면 시청자·송출자 화면 모두에 💰 후원 알림이 실시간으로 뜹니다.
+- 자신의 방송에는 후원할 수 없습니다.
 
 ### 지원 환경
 | 기능 | 지원 |
@@ -94,6 +104,22 @@ READY ──start──▶ LIVE ──end──▶ ENDED
 - CSRF: `XSRF-TOKEN` 쿠키 + `X-XSRF-TOKEN` 헤더 (웹훅은 LiveKit 서명 JWT로 별도 검증)
 - 쿠키: `HttpOnly`, `SameSite=Lax`, 운영 환경 `Secure`
 
+### 도네이션 검증과 중복 적립 방지
+```
+[브라우저] 후원하기 ─▶ [서버] 주문 저장(orderId·금액·후원 대상=방송 소유자, PENDING)
+     │ 토스 결제창 (테스트 모드)
+     ▼ successUrl?paymentKey&orderId&amount
+[서버] confirm ─ 주문 잠금(SELECT … FOR UPDATE)
+       ├─ 요청 금액 ≠ 주문 금액 → 승인 요청 없이 거절
+       ├─ 토스 승인 API 호출 (Idempotency-Key)
+       ├─ 응답의 status=DONE · totalAmount · orderId 재검증
+       └─ PENDING → DONE (한 번만 전이) → 커밋 후 방송 방에 실시간 알림
+[토스 웹훅] 본문은 믿지 않고 결제 단건 조회 API로 재확인 → 같은 확정 로직
+```
+- **같은 승인 통지가 반복돼도 한 번만 적립**: 주문 행 비관적 잠금 + 상태 전이는 PENDING→DONE 1회 + `paymentKey` unique 제약. 합계는 DONE 건만 집계합니다.
+- 금액·후원 대상은 서버가 저장한 주문 값만 사용합니다(브라우저 값으로 바뀌지 않음).
+- 승인 거절은 FAILED로 기록되고 같은 주문으로 다시 승인할 수 없습니다.
+
 ### 채팅 실시간 전달
 채팅은 REST로 저장(작성자 권한 검증) → **DB 커밋 후** 서버가 LiveKit `sendData`로 방 전체에 전달합니다. 시청자 토큰에는 데이터 전송 권한이 없어 클라이언트가 임의로 메시지를 뿌릴 수 없습니다.
 
@@ -116,6 +142,10 @@ READY ──start──▶ LIVE ──end──▶ ENDED
 | GET | `/api/broadcasts/{id}/viewer-token` | 누구나 | 시청 전용 토큰 |
 | GET / POST | `/api/broadcasts/{id}/chats` | 조회 누구나 / 작성 로그인 | 채팅 |
 | PATCH / DELETE | `/api/chats/{id}` | 작성자 | 채팅 수정 / 삭제 |
+| POST | `/api/broadcasts/{id}/donations` | 로그인(소유자 제외) | 후원 주문 생성 |
+| POST | `/api/donations/confirm` | 주문자 | 결제 승인·적립 |
+| GET | `/api/broadcasts/{id}/donations` | 누구나 | 누적 후원 금액·건수·최근 내역 |
+| POST | `/api/webhooks/toss` | 결제사 재조회로 검증 | 결제 상태 변경 통지 |
 | GET | `/api/recordings`, `/api/recordings/{id}` | 누구나 | 녹화 영상 |
 | POST | `/api/webhooks/livekit` | LiveKit 서명 | 미디어 서버 이벤트 |
 
@@ -139,6 +169,8 @@ READY ──start──▶ LIVE ──end──▶ ENDED
 | `COOKIE_SECURE` | HTTPS 환경에서 `true` |
 | `PUBLISHER_GRACE_PERIOD` | 송출자 연결 끊김 후 자동 종료까지 (기본 `45s`) |
 | `DEMO_ACCOUNTS_ENABLED` | 테스트 계정 버튼 (기본 `true`) |
+| `TOSS_CLIENT_KEY`, `TOSS_SECRET_KEY` | 토스페이먼츠 **테스트** 키 (`test_ck_…`, `test_sk_…`) |
+| `RECORDING_ENABLED`, `S3_*` | 녹화 저장소(Cloudflare R2 등 S3 호환). 기본 비활성 |
 
 ### 로컬 실행
 ```bash
@@ -168,7 +200,10 @@ cd backend && ./gradlew test
 미디어 서버를 가짜 구현(`FakeMediaServer`)으로 바꿔 끼워 다음을 검증합니다.
 - 비로그인 / 소유자 / 다른 사용자별 허용·거절 (방송 CRUD, 송출 시작·종료, 시청 토큰)
 - 상태 전이(중복 시작·종료 409), 방송 중 삭제 시 송출 중단, 송출자 부재 자동 종료, 방 정리 재시도
-- 채팅 작성자 권한, 웹훅 서명 검증, CSRF
+- 채팅 작성자 권한·도배 방지, 웹훅 서명 검증, CSRF
+- 도네이션: 반복 승인·반복 웹훅 시 1회 적립, 금액 조작 거절, 타인 주문 승인 거절, 승인 실패 기록
+
+GitHub Actions(`.github/workflows/ci.yml`)가 push마다 백엔드 테스트와 프론트 린트·빌드를 실행합니다.
 
 ### 배포 (Render)
 1. Neon에서 PostgreSQL 생성 → `jdbc:postgresql://<host>/<db>?sslmode=require`
@@ -185,16 +220,18 @@ backend/src/main/java/com/live
 ├── broadcast/   방송 엔티티·상태머신, 서비스, 상태 동기화 스케줄러
 ├── media/       MediaServer 추상화, LiveKit 구현, 웹훅
 ├── chat/        채팅 저장·권한, 커밋 후 실시간 전달
+├── donation/    후원 주문·승인 검증·멱등 적립, 토스페이먼츠 연동
 ├── recording/   녹화(Egress) 메타데이터
 ├── config/      Security, SPA 라우팅
 └── common/      에러 코드·예외 처리
 frontend/src
 ├── pages/       목록, 상세(시청), 스튜디오(송출), 인증, 다시보기
-├── components/  LivePlayer, ChatPanel, Layout
+├── components/  LivePlayer(볼륨·전체화면·시청자 수·재연결), ChatPanel, DonationBox
 └── lib/         API 클라이언트(CSRF), 인증 컨텍스트
 ```
 
 ## 6. 출처 및 사용 라이브러리
+- [토스페이먼츠](https://docs.tosspayments.com) — 결제창 SDK v2, 코어 API(승인·조회) 테스트 모드
 - [LiveKit](https://livekit.io) — WebRTC SFU(Cloud), `livekit-client`, `livekit-server` SDK (Apache-2.0)
 - Spring Boot, Spring Security, Spring Session (Apache-2.0)
 - React, Vite, React Router (MIT)

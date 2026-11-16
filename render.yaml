@@ -28,5 +28,18 @@ services:
         value: "true"
       - key: DEMO_ACCOUNTS_ENABLED
         value: "true"
+      # 녹화: Cloudflare R2 등 S3 호환 저장소 (README 참고)
       - key: RECORDING_ENABLED
-        value: "false"
+        sync: false
+      - key: S3_ACCESS_KEY
+        sync: false
+      - key: S3_SECRET
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_PUBLIC_BASE_URL
+        sync: false
+      - key: S3_REGION
+        value: auto
