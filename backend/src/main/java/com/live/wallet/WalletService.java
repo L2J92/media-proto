@@ -2,7 +2,8 @@ package com.live.wallet;
 
 import com.live.common.ApiException;
 import com.live.common.ErrorCode;
-import org.springframework.dao.DataIntegrityViolationException;
+import com.live.user.UserRegisteredEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -15,13 +16,21 @@ import java.util.List;
 public class WalletService {
     private final WalletRepository walletRepository;
     private final PointTransactionRepository txRepository;
-    private final WalletInitializer initializer;
 
-    public WalletService(WalletRepository walletRepository, PointTransactionRepository txRepository,
-                         WalletInitializer initializer) {
+    public WalletService(WalletRepository walletRepository, PointTransactionRepository txRepository) {
         this.walletRepository = walletRepository;
         this.txRepository = txRepository;
-        this.initializer = initializer;
+    }
+
+    /**
+     * 회원 가입과 같은 트랜잭션에서 지갑을 만든다.
+     * (예전에는 처음 쓸 때 별도 트랜잭션으로 만들었는데, 동시 요청이 몰리면 요청 하나가 커넥션 2개를 잡아
+     *  작은 커넥션 풀이 고갈될 수 있어 가입 시점 생성 + V3 마이그레이션 백필로 바꿨다.)
+     */
+    @EventListener
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void onUserRegistered(UserRegisteredEvent e) {
+        walletRepository.save(new Wallet(e.userId()));
     }
 
     /** 충전. 호출하는 쪽 트랜잭션 안에서만 쓴다. @return 충전 후 잔액 */
@@ -60,15 +69,8 @@ public class WalletService {
     }
 
     private Wallet lock(Long userId) {
-        return walletRepository.findByUserIdForUpdate(userId).orElseGet(() -> {
-            try {
-                initializer.createIfAbsent(userId);
-            } catch (DataIntegrityViolationException ignored) {
-                // 동시에 다른 요청이 먼저 만들었다
-            }
-            return walletRepository.findByUserIdForUpdate(userId)
-                    .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
-        });
+        return walletRepository.findByUserIdForUpdate(userId)
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
     }
 
     public record WalletResponse(long balance, List<TransactionResponse> transactions) {}
