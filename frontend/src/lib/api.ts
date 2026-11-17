@@ -44,6 +44,15 @@ export interface PointTransaction {
 export interface Wallet { balance: number; transactions: PointTransaction[] }
 export interface DonationSummary { totalAmount: number; count: number; recent: Donation[] }
 
+export type VideoQualityPref = 'auto' | 'high' | 'medium' | 'low'
+export interface QoeBucket { at: string; viewers: number; avgBitrateKbps: number; avgPacketLossPct: number; avgRttMs: number; freezes: number }
+export interface QoeSummary {
+  windowMinutes: number; reportingViewers: number; samples: number
+  avgBitrateKbps: number; avgRttMs: number; p95RttMs: number; avgPacketLossPct: number; avgJitterMs: number; avgFps: number
+  totalFreezes: number; totalFramesDropped: number; qualityShare: Record<string, number>; typicalHeight: number
+  timeline: QoeBucket[]
+}
+
 export class ApiError extends Error {
   readonly status: number
   readonly code: string
@@ -125,6 +134,10 @@ export const api = {
   donate: (broadcastId: number, amount: number, message: string, requestId: string) =>
     request<{ donation: Donation; balance: number }>('POST', `/api/broadcasts/${broadcastId}/donations`, { amount, message, requestId }),
   donations: (broadcastId: number) => request<DonationSummary>('GET', `/api/broadcasts/${broadcastId}/donations`),
+
+  reportQoe: (broadcastId: number, sample: Record<string, number | string>) =>
+    request<void>('POST', `/api/broadcasts/${broadcastId}/qoe`, sample),
+  qoe: (broadcastId: number, minutes = 5) => request<QoeSummary>('GET', `/api/broadcasts/${broadcastId}/qoe?minutes=${minutes}`),
 
   recordings: () => request<Recording[]>('GET', '/api/recordings'),
   recording: (id: number) => request<Recording>('GET', `/api/recordings/${id}`),

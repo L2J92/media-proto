@@ -7,6 +7,7 @@ import { canShareScreen, isMobileDevice } from '../lib/format'
 import { StatusBadge } from '../components/StatusBadge'
 import { ChatPanel } from '../components/ChatPanel'
 import { DonationBox } from '../components/DonationBox'
+import { QoePanel } from '../components/QoePanel'
 
 /**
  * 송출 화면. 장치(화면/카메라/마이크)를 먼저 고른 뒤 송출을 시작하면
@@ -172,6 +173,7 @@ export function StudioPage() {
         </div>
 
         {error && <p className="error">{error}</p>}
+        {isLive && <QoePanel broadcastId={broadcastId} />}
         {isLive && <DonationBox broadcast={broadcast} room={mySession.room} />}
 
         {!isEnded && !otherSession && (
