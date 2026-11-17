@@ -86,7 +86,7 @@ export function BroadcastDetailPage() {
                 <div key={r.id}>
                   {r.status === 'COMPLETED'
                     ? <Link to={`/recordings/${r.id}`}>▶ 녹화 영상 {duration(r.durationMillis)}</Link>
-                    : <span className="muted small">{r.status === 'RECORDING' ? '녹화 중 / 처리 중…' : '녹화 실패'}</span>}
+                    : <span className="muted small">{r.status === 'RECORDING' ? '녹화 중 / 처리 중…' : `녹화 실패${r.failReason ? ` — ${r.failReason}` : ''}`}</span>}
                 </div>
               ))}
             </div>

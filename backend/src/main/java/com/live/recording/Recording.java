@@ -28,6 +28,10 @@ public class Recording extends BaseTimeEntity {
 
     private Long durationMillis;
 
+    /** 실패 사유 (미디어 서버가 보고한 오류) */
+    @Column(length = 300)
+    private String failReason;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
     private RecordingStatus status = RecordingStatus.RECORDING;
@@ -48,10 +52,13 @@ public class Recording extends BaseTimeEntity {
         this.durationMillis = durationMillis;
     }
 
-    public void fail() {
+    public void fail(String reason) {
         if (status != RecordingStatus.RECORDING) return;
         this.status = RecordingStatus.FAILED;
+        this.failReason = reason == null ? null : reason.substring(0, Math.min(300, reason.length()));
     }
+
+    public String getFailReason() { return failReason; }
 
     public Long getId() { return id; }
     public Broadcast getBroadcast() { return broadcast; }

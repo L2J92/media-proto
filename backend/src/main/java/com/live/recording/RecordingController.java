@@ -1,5 +1,7 @@
 package com.live.recording;
 
+import com.live.user.AuthUser;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,7 +25,7 @@ public class RecordingController {
     }
 
     @GetMapping("/api/broadcasts/{broadcastId}/recordings")
-    public List<RecordingResponse> byBroadcast(@PathVariable Long broadcastId) {
-        return recordingService.listByBroadcast(broadcastId);
+    public List<RecordingResponse> byBroadcast(@PathVariable Long broadcastId, @AuthenticationPrincipal AuthUser user) {
+        return recordingService.listByBroadcast(broadcastId, user == null ? null : user.id());
     }
 }

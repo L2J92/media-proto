@@ -41,7 +41,11 @@ public interface MediaServer {
     /** 녹화 상태 조회 (웹훅 유실 대비). 아직 진행 중이면 finished=false. 알 수 없으면 empty. */
     Optional<RecordingState> findRecording(String egressId);
 
-    record RecordingState(boolean finished, boolean succeeded, String location, long durationMillis) {}
+    record RecordingState(boolean finished, boolean succeeded, String location, long durationMillis, String error) {
+        public RecordingState(boolean finished, boolean succeeded, String location, long durationMillis) {
+            this(finished, succeeded, location, durationMillis, null);
+        }
+    }
 
     /** 웹훅 서명을 검증하고 필요한 정보만 꺼낸다. 서명이 틀리면 예외. */
     MediaEvent parseWebhook(String body, String authorization);

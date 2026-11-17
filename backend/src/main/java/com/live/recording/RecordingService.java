@@ -43,10 +43,10 @@ public class RecordingService {
     }
 
     @Transactional
-    public void onEgressEnded(String egressId, boolean succeeded, String location, long durationMillis) {
+    public void onEgressEnded(String egressId, boolean succeeded, String location, long durationMillis, String error) {
         recordingRepository.findByEgressId(egressId).ifPresent(r -> {
             if (succeeded) r.complete(location, durationMillis);
-            else r.fail();
+            else fail(r, error);
         });
     }
 
@@ -60,8 +60,13 @@ public class RecordingService {
         if (r == null || r.getStatus() != RecordingStatus.RECORDING || r.getBroadcast().isLive()) return;
         mediaServer.findRecording(r.getEgressId()).filter(MediaServer.RecordingState::finished).ifPresent(st -> {
             if (st.succeeded()) r.complete(st.location(), st.durationMillis());
-            else r.fail();
+            else fail(r, st.error());
         });
+    }
+
+    private void fail(Recording r, String error) {
+        log.warn("Recording {} (egress {}) failed: {}", r.getId(), r.getEgressId(), error);
+        r.fail(error);
     }
 
     @Transactional(readOnly = true)
@@ -75,8 +80,13 @@ public class RecordingService {
     }
 
     @Transactional(readOnly = true)
-    public List<RecordingResponse> listByBroadcast(Long broadcastId) {
-        return recordingRepository.findByBroadcast(broadcastId).stream().map(this::toResponse).toList();
+    public List<RecordingResponse> listByBroadcast(Long broadcastId, Long viewerId) {
+        // 실패 사유는 방송 소유자에게만 보여준다 (저장소 설정 정보가 섞일 수 있음)
+        return recordingRepository.findByBroadcast(broadcastId).stream().map(r -> {
+            RecordingResponse res = toResponse(r);
+            boolean owner = viewerId != null && r.getBroadcast().isOwnedBy(viewerId);
+            return owner ? res.withFailReason(r.getFailReason()) : res;
+        }).toList();
     }
 
     @Transactional(readOnly = true)

@@ -37,7 +37,7 @@ public class LiveKitWebhookController {
             case PARTICIPANT_LEFT -> broadcastService.onPublisherLeft(event.roomName(), event.participantIdentity());
             case ROOM_FINISHED -> broadcastService.onRoomFinished(event.roomName());
             case EGRESS_ENDED -> recordingService.onEgressEnded(event.egressId(), event.egressSucceeded(),
-                    event.fileLocation(), event.durationMillis());
+                    event.fileLocation(), event.durationMillis(), event.error());
             case OTHER -> { }
         }
         return ResponseEntity.ok().build();
