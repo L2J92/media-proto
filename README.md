@@ -4,7 +4,7 @@ PC 화면 공유(탭·시스템 소리 + 마이크)와 휴대폰 카메라로 �
 
 | 항목 | 내용 |
 |---|---|
-| 서비스 주소 | **https://live-platform-mo19.onrender.com** |
+| 서비스 주소 | **https://media-proto.onrender.com** |
 | 시연 영상 | **(링크 기입)** — PC 송출·시청·종료 / 모바일 송출·시청·종료 |
 | 테스트 계정 | 로그인 화면의 **[방송자 계정] [방송자2 계정] [시청자 계정]** 버튼으로 비밀번호 없이 바로 로그인 |
 
@@ -216,7 +216,7 @@ GitHub Actions(`.github/workflows/ci.yml`)가 push마다 백엔드 테스트와 
 
 ### 배포 (Render)
 1. Neon에서 PostgreSQL 생성 → `jdbc:postgresql://<host>/<db>?sslmode=require`
-2. Render → New → **Blueprint** → 이 저장소 선택 (`render.yaml`)
+2. Render → New → **Blueprint** → 이 저장소 선택 (`render.yaml`, Singapore 리전 — Neon DB와 같은 지역)
 3. 환경변수 6개(DB 3, LiveKit 3) 입력 → 배포
 4. (선택) LiveKit Cloud → Settings → Webhooks에 `https://<서비스>/api/webhooks/livekit` 등록
 
