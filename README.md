@@ -71,6 +71,11 @@ PC 화면 공유(탭·시스템 소리 + 마이크)와 휴대폰 카메라로 �
 - **📊 통계**(유튜브 '전문가용 통계'처럼): 해상도·FPS·코덱·비트레이트·패킷 손실·지터·RTT·프레임 드롭·끊김 — WebRTC `getStats()` 표준 통계
 - 시청자 플레이어는 10초마다 품질 샘플을 서버에 보내고, **송출 스튜디오의 "시청 품질" 패널**에서 최근 5분 보고 시청자 수, 평균 비트레이트, RTT 평균/p95, 손실률, 끊김, 화질 선택 비율, 분당 추이를 볼 수 있습니다(방송 소유자만).
 
+### 1-8. 채널 · 팔로우 · 방송 시작 알림
+- 가입하면 **채널**(`/c/@u{회원ID}`)이 생기고, 채널 페이지에서 주소·이름·소개를 바꿀 수 있습니다. 방송은 채널의 회차로 쌓입니다.
+- 방송 화면·채널 페이지의 **+ 팔로우** → 상단 **팔로잉** 메뉴에서 팔로우한 채널을 방송 중인 순서로 확인
+- 팔로우한 채널이 방송을 시작하면 **실시간 알림 토스트**가 뜹니다(SSE `/api/realtime/me`).
+
 ### 지원 환경
 | 기능 | 지원 |
 |---|---|
@@ -176,6 +181,10 @@ READY ──start──▶ LIVE ──end──▶ ENDED
 | POST | `/api/broadcasts/{id}/qoe` | 누구나(시청자, 5초 간격 제한) | 시청 품질 샘플 |
 | GET | `/api/broadcasts/{id}/qoe?minutes=5` | 소유자 | 시청 품질 요약·추이 |
 | GET | `/api/recordings`, `/api/recordings/{id}` | 누구나 | 녹화 영상 |
+| GET | `/api/channels/{handle}`, `/api/channels/{handle}/broadcasts` | 누구나 | 채널 정보(팔로워 수·방송 중)·방송 회차 |
+| GET / PATCH | `/api/me/channel` | 로그인 | 내 채널 조회·수정 |
+| POST / DELETE | `/api/channels/{handle}/follow` | 로그인 | 팔로우·언팔로우 (멱등) |
+| GET | `/api/me/following` | 로그인 | 팔로잉 목록 (방송 중 먼저) |
 | GET (SSE) | `/api/realtime/broadcasts/{id}` | 누구나 | 방송 이벤트 구독 (chat, donation) |
 | GET (SSE) | `/api/realtime/me` | 로그인 | 내 알림 구독 |
 | POST | `/api/webhooks/livekit` | LiveKit 서명 | 미디어 서버 이벤트 |
@@ -262,6 +271,7 @@ backend/src/main/java/com/live
 ├── recording/   HLS 녹화(Egress)·다시보기, 상태 조회 확정
 ├── qoe/         시청 품질 샘플 수집·요약(p95 등)
 ├── realtime/    이벤트 평면: RealtimePublisher, SSE 허브
+├── channel/     채널·팔로우, 방송 시작 알림
 ├── config/      Security, SPA 라우팅
 └── common/      에러 코드·예외 처리
 frontend/src

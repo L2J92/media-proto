@@ -15,18 +15,19 @@ public final class BroadcastDtos {
 
     public record StartRequest(@NotNull BroadcastSource source) {}
 
-    public record OwnerDto(Long id, String nickname) {}
+    /** channelHandle: 채널 페이지 주소(/c/{handle}) */
+    public record OwnerDto(Long id, String nickname, String channelHandle) {}
 
     public record BroadcastResponse(
             Long id, String title, String description, BroadcastStatus status, BroadcastSource source,
             OwnerDto owner, Instant createdAt, Instant startedAt, Instant endedAt, Integer viewerCount) {
         public static BroadcastResponse from(Broadcast b) {
-            return from(b, null);
+            return from(b, null, null);
         }
 
-        public static BroadcastResponse from(Broadcast b, Integer viewerCount) {
+        public static BroadcastResponse from(Broadcast b, Integer viewerCount, String channelHandle) {
             return new BroadcastResponse(b.getId(), b.getTitle(), b.getDescription(), b.getStatus(), b.getSource(),
-                    new OwnerDto(b.getOwner().getId(), b.getOwner().getNickname()),
+                    new OwnerDto(b.getOwner().getId(), b.getOwner().getNickname(), channelHandle),
                     b.getCreatedAt(), b.getStartedAt(), b.getEndedAt(), viewerCount);
         }
     }
