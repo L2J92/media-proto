@@ -10,6 +10,26 @@ PC 화면 공유(탭·시스템 소리 + 마이크)와 휴대폰 카메라로 �
 
 > 무료 호스팅(Render Free)을 사용합니다. 15분간 접속이 없으면 서버가 잠들어 **첫 접속 시 약 1분** 로딩될 수 있습니다.
 
+## 체크리스트 대응표
+| 요구사항 | 확인 방법 | 자동 테스트 |
+|---|---|---|
+| PC 화면 캡처 실시간 송출 | [1-1](#1-1-pc-라이브-방송-화면-공유--소리) | — (실기기, 시연 영상) |
+| 탭/시스템 소리 + 마이크 함께 송출 | [1-1](#1-1-pc-라이브-방송-화면-공유--소리) 3단계, 송출 화면에 "화면 소리·마이크" 상태 표시 | — |
+| 방송 시작·종료 시 송출 연결 생성·종료 | 시작 = LiveKit 방 생성 + 송출 토큰, 종료 = **방 삭제로 연결 강제 종료** ([방송 상태 관리](#방송-상태-관리)) | `BroadcastAuthorizationTest` |
+| 휴대폰 카메라·마이크 송출, 모바일 시작·종료 | [1-2](#1-2-모바일-라이브-방송-카메라--마이크) | — (실기기, 시연 영상) |
+| 방송 정보 등록·조회·수정·삭제 | [1-3](#1-3-방송-관리--인증인가-확인), [API](#3-api-요약) | `BroadcastAuthorizationTest` |
+| 목록·상세, PC/모바일 송출을 다른 기기에서 수신·재생 | [1-1](#1-1-pc-라이브-방송-화면-공유--소리) 5단계, [1-2](#1-2-모바일-라이브-방송-카메라--마이크) 4단계 | — |
+| 방송 중/종료 상태 관리, 종료 시 송출 중단 | `READY→LIVE→ENDED`, 송출자 이탈 45초 자동 종료, 웹훅 + 주기 조회 보정 | `BroadcastAuthorizationTest`, `WebhookTest` |
+| 방송 정보 영구 저장, 재시작 후 조회 | PostgreSQL(Neon) + Flyway, 세션도 DB 저장 | `PostgresIntegrationTest` |
+| 회원가입·로그인·로그아웃·인증 상태 | [인증](#인증) | `AuthFlowTest` |
+| 비로그인 조회·시청 / 로그인 사용자만 등록·송출 | [1-3](#1-3-방송-관리--인증인가-확인) 표 | `BroadcastAuthorizationTest` (비로그인/다른 사용자/소유자) |
+| 수정·삭제·송출 제어 시 서버의 소유자 권한 검증 | 다른 사용자 → `403 NOT_BROADCAST_OWNER` | `BroadcastAuthorizationTest` |
+| (선택) 댓글 작성·조회·수정·삭제, 작성자 권한 | [1-4](#1-4-채팅-선택-요구사항--댓글) | `ChatTest` |
+| (선택) 도네이션: 대상·금액 선택, 테스트 결제 | [1-5](#1-5-도네이션-선택-요구사항--포인트-지갑--토스페이먼츠-테스트-결제) | `WalletDonationTest` |
+| (선택) 승인 결과·금액·후원 대상 서버 검증 | [결제 검증](#도네이션-결제-검증과-중복-적립-방지) | `WalletDonationTest` |
+| (선택) 중복 승인 통지 1회 적립, 방송별 내역·합계 | 주문 잠금 + 1회 상태 전이 + unique | `WalletDonationTest`, `PostgresIntegrationTest`(동시 요청) |
+| (선택) 녹화 저장, 목록·상세·재생, 위치 영구 저장 | [1-6](#1-6-녹화-및-다시보기-선택-요구사항--hls) | `RecordingTest` |
+
 ---
 
 ## 1. 기능 확인 방법
@@ -42,7 +62,7 @@ PC 화면 공유(탭·시스템 소리 + 마이크)와 휴대폰 카메라로 �
 | 비로그인으로 방송하기 / 채팅 작성 | 로그인 화면으로 이동 (API는 `401`) |
 | 소유자가 제목 수정 / 삭제 / 송출 시작·종료 | ✅ 가능 (방송 중 삭제 시 송출 중단 후 삭제) |
 | 다른 사용자가 남의 방송 수정·삭제·송출·종료 | `403 NOT_BROADCAST_OWNER` |
-| 다른 사용자가 남의 채팅 수정·삭제 | `403 NOT_CHAT_AUTHOR` |
+| 다른 사용자가 남의 채팅 수정·삭제 | `403 NOT_CHAT_AUTHOR` (삭제는 채널 소유자·매니저만 예외) |
 | 서버 재시작 후 | 방송 정보·채팅·로그인 세션 유지 (PostgreSQL 저장) |
 
 ### 1-4. 채팅 (선택 요구사항 · 댓글)
@@ -66,13 +86,15 @@ PC 화면 공유(탭·시스템 소리 + 마이크)와 휴대폰 카메라로 �
 3. 재생: Safari는 네이티브 HLS, Chrome/Edge 등은 hls.js로 재생합니다(탐색·이어보기 가능).
 - 녹화 완료는 LiveKit 웹훅(`egress_ended`)과 **30초 주기 상태 조회**를 함께 사용해, 웹훅이 유실돼도 "처리 중"에 머물지 않습니다.
 
+> 아래 1-7 ~ 1-9는 요구사항 외 **추가 구현**입니다.
+
 ### 1-7. 화질 선택 · 시청 품질(QoE) 모니터링
 - 시청 플레이어 하단 **⚙ 화질**: 자동 / 고화질 / 중간 / 저화질 (송출은 시뮬캐스트로 여러 화질을 동시에 보내고, 시청자가 레이어를 고름. 자동은 대역폭에 맞춰 SFU가 조절)
 - **📊 통계**(유튜브 '전문가용 통계'처럼): 해상도·FPS·코덱·비트레이트·패킷 손실·지터·RTT·프레임 드롭·끊김 — WebRTC `getStats()` 표준 통계
 - 시청자 플레이어는 10초마다 품질 샘플을 서버에 보내고, **송출 스튜디오의 "시청 품질" 패널**에서 최근 5분 보고 시청자 수, 평균 비트레이트, RTT 평균/p95, 손실률, 끊김, 화질 선택 비율, 분당 추이를 볼 수 있습니다(방송 소유자만).
 
 ### 1-8. 채널 · 팔로우 · 방송 시작 알림
-- 가입하면 **채널**(`/c/@u{회원ID}`)이 생기고, 채널 페이지에서 주소·이름·소개를 바꿀 수 있습니다. 방송은 채널의 회차로 쌓입니다.
+- 가입하면 **채널**(`/c/u{회원ID}`)이 생기고, 채널 페이지에서 주소·이름·소개를 바꿀 수 있습니다. 방송은 채널의 회차로 쌓입니다.
 - 방송 화면·채널 페이지의 **+ 팔로우** → 상단 **팔로잉** 메뉴에서 팔로우한 채널을 방송 중인 순서로 확인
 - 팔로우한 채널이 방송을 시작하면 **실시간 알림 토스트**가 뜹니다(SSE `/api/realtime/me`).
 
@@ -258,9 +280,14 @@ GitHub Actions(`.github/workflows/ci.yml`)가 push마다 백엔드 테스트와 
 ### 배포 (Render)
 1. Neon에서 PostgreSQL 생성 → `jdbc:postgresql://<host>/<db>?sslmode=require`
 2. Render → New → **Blueprint** → 이 저장소 선택 (`render.yaml`, Singapore 리전 — Neon DB와 같은 지역)
-3. 환경변수 6개(DB 3, LiveKit 3) 입력 → 배포
+3. 환경변수 입력 → 배포
+   - 필수: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
+     (`REQUIRE_PRODUCTION_CONFIG=true`라 하나라도 없으면 기동 실패 → 이전 버전 유지)
+   - 결제: `TOSS_CLIENT_KEY`(`test_ck_…`), `TOSS_SECRET_KEY`(`test_sk_…`)
 4. (선택) LiveKit Cloud → Settings → Webhooks에 `https://<서비스>/api/webhooks/livekit` 등록
 5. (선택) 녹화: S3 호환 저장소를 만들고 `RECORDING_ENABLED=true`, `S3_*` 입력
+   - 예) **Cloudflare R2**(현재 배포): 버킷 공개 주소(r2.dev) + API 토큰, `S3_REGION=auto`
+     - hls.js 가 재생 목록·세그먼트를 직접 받으므로 버킷 **CORS에 서비스 도메인 GET 허용** 필요
    - 예) **Supabase Storage**(무료, 카드 불필요): 공개 버킷 생성 → Project Settings → Storage → S3 Access Keys
      - `S3_ENDPOINT=https://<project>.supabase.co/storage/v1/s3`, `S3_REGION=<프로젝트 리전, 예: ap-southeast-1>`
      - `S3_PUBLIC_BASE_URL=https://<project>.supabase.co/storage/v1/object/public/<버킷>`
@@ -285,9 +312,9 @@ backend/src/main/java/com/live
 ├── config/      Security, SPA 라우팅
 └── common/      에러 코드·예외 처리
 frontend/src
-├── pages/       목록, 상세(시청), 스튜디오(송출), 인증, 다시보기
-├── components/  LivePlayer(볼륨·전체화면·시청자 수·재연결), ChatPanel, DonationBox
-└── lib/         API 클라이언트(CSRF), 인증 컨텍스트
+├── pages/       목록, 상세(시청), 스튜디오(송출), 채널·팔로잉, 지갑, 다시보기, 인증
+├── components/  LivePlayer(화질·통계·볼륨·전체화면·재연결), VodPlayer(HLS), ChatPanel(관리), DonationBox, QoePanel
+└── lib/         API 클라이언트(CSRF), 송출 세션(페이지 이동 중 유지), SSE 구독, QoE 측정, 지갑·인증 컨텍스트
 ```
 
 ## 6. 출처 및 사용 라이브러리
@@ -296,4 +323,15 @@ frontend/src
 - Spring Boot, Spring Security, Spring Session (Apache-2.0)
 - React, Vite, React Router (MIT)
 - 프론트엔드 초기 구조는 `npm create vite` React-TS 템플릿에서 시작했습니다.
-- 개발 과정에서 AI 개발 도구(Claude)를 활용했습니다.
+- 개발 과정에서 AI 개발 도구(Claude)를 활용했습니다. 아래 [AI 활용 방식](#7-ai-활용-방식) 참고.
+
+## 7. AI 활용 방식
+공모 안내에 따라 AI 개발 도구를 적극 활용했고, 역할을 다음과 같이 나눴습니다.
+
+| AI(Claude)가 맡은 것 | 직접 한 것 |
+|---|---|
+| 코드 초안 작성(백엔드·프론트), 테스트 초안, 문서 초안 | 기술 스택·아키텍처 방향 결정(SFU 분리, MVC, 포인트 지갑 + 바로 후원 혼합 구조 등) |
+| 라이브러리 API 조사, 설계 대안 제시 | 실기기(PC·휴대폰) 송출·시청 검증, 배포 환경(Render·Neon·LiveKit·토스·R2) 구성 |
+| 코드 리뷰·반례 제시 | 문제 발견과 우선순위 판단(채팅 체감 지연, 송출 중 페이지 이동 시 끊김, 리전 지연 등), 모든 PR 검토 후 머지 |
+
+- 모든 변경은 이슈 → 브랜치 → PR → CI(테스트) 통과 → 머지 순서로 진행했고, 커밋에 AI 공동 작성 표기를 남겼습니다.
