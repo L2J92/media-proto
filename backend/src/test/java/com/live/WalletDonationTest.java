@@ -154,7 +154,7 @@ class WalletDonationTest extends IntegrationTestSupport {
             assertThat(balance(streamer)).isEqualTo(3000);
             assertThat(summary(id).get("totalAmount").asLong()).isEqualTo(3000);
             assertThat(summary(id).get("count").asLong()).isEqualTo(1);
-            assertThat(media.sentData).anyMatch(s -> s.contains("|donation|"));
+            assertThat(realtime.published).anyMatch(s -> s.startsWith("broadcast:" + id + "|donation|"));
         }
 
         @Test

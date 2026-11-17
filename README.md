@@ -138,10 +138,17 @@ READY ──start──▶ LIVE ──end──▶ ENDED
 - **잔액 정합성**: 지갑 행 잠금 + 잔액 부족 시 예외로 후원 기록까지 롤백, 모든 변경은 `point_transactions` 원장에 잔액과 함께 기록됩니다.
 - 결제 후 방송이 삭제된 경우 후원은 건너뛰고 충전된 포인트는 지갑에 남깁니다(결제 금액 유실 없음).
 
-### 채팅 실시간 전달
-채팅은 REST로 저장(작성자 권한 검증) → **DB 커밋 후** 서버가 LiveKit `sendData`로 방 전체에 전달합니다. 시청자 토큰에는 데이터 전송 권한이 없어 클라이언트가 임의로 메시지를 뿌릴 수 없습니다.
-
----
+### 미디어 평면과 이벤트 평면 분리
+```
+미디어 평면: 송출자 ──WebRTC──▶ LiveKit SFU ──WebRTC──▶ 시청자          (영상·음성)
+이벤트 평면: Spring ──SSE(/api/realtime/...)──▶ 브라우저                (채팅·후원·관리·알림)
+```
+- 채팅·후원 등 앱 이벤트는 `RealtimePublisher` 인터페이스로 보내고, 현재 구현은 **SSE(Server-Sent Events)** 입니다.
+  - 방송이 꺼져 있어도(종료된 방송의 댓글, 앞으로의 텍스트 채널·개인 알림) 같은 방식으로 전달됩니다.
+  - 서버를 여러 대로 늘리면 Redis Pub/Sub 구현으로 교체할 수 있게 인터페이스로 분리했습니다.
+- 이벤트는 **DB 커밋 후**(`@TransactionalEventListener`) 발행되어, 롤백된 채팅·후원이 화면에 나가지 않습니다.
+- 가상 스레드라 SSE 연결이 플랫폼 스레드를 점유하지 않고, 20초 하트비트로 프록시 유휴 끊김과 죽은 연결을 정리합니다.
+- 클라이언트는 같은 방송의 구독을 EventSource 하나로 공유하고, 끊기면 자동 재연결합니다.
 
 ## 3. API 요약
 
@@ -169,6 +176,8 @@ READY ──start──▶ LIVE ──end──▶ ENDED
 | POST | `/api/broadcasts/{id}/qoe` | 누구나(시청자, 5초 간격 제한) | 시청 품질 샘플 |
 | GET | `/api/broadcasts/{id}/qoe?minutes=5` | 소유자 | 시청 품질 요약·추이 |
 | GET | `/api/recordings`, `/api/recordings/{id}` | 누구나 | 녹화 영상 |
+| GET (SSE) | `/api/realtime/broadcasts/{id}` | 누구나 | 방송 이벤트 구독 (chat, donation) |
+| GET (SSE) | `/api/realtime/me` | 로그인 | 내 알림 구독 |
 | POST | `/api/webhooks/livekit` | LiveKit 서명 | 미디어 서버 이벤트 |
 
 에러 응답 형식: `{ "code": "NOT_BROADCAST_OWNER", "message": "방송 소유자만 할 수 있습니다.", "fieldErrors": {} }`
@@ -252,6 +261,7 @@ backend/src/main/java/com/live
 ├── payment/     결제사 추상화(PaymentGateway), 토스페이먼츠 구현
 ├── recording/   HLS 녹화(Egress)·다시보기, 상태 조회 확정
 ├── qoe/         시청 품질 샘플 수집·요약(p95 등)
+├── realtime/    이벤트 평면: RealtimePublisher, SSE 허브
 ├── config/      Security, SPA 라우팅
 └── common/      에러 코드·예외 처리
 frontend/src

@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { RoomEvent, type Room } from 'livekit-client'
 import { api, ApiError, errorMessage, type Broadcast, type Donation, type DonationSummary } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { useWallet } from '../lib/wallet'
 import { newRequestId, points } from '../lib/points'
 import { requestCardPayment } from '../lib/toss'
+import { broadcastEvents, useServerEvent } from '../lib/realtime'
 
 const PRESETS = [1000, 5000, 10000, 50000]
 
 /**
  * 후원: 포인트가 충분하면 즉시 후원, 부족하면 "충전하고 바로 후원"(토스 결제 1회로 충전 + 후원).
  */
-export function DonationBox({ broadcast, room }: { broadcast: Broadcast; room: Room | null }) {
+export function DonationBox({ broadcast }: { broadcast: Broadcast }) {
   const { me } = useAuth()
   const wallet = useWallet()
   const [summary, setSummary] = useState<DonationSummary | null>(null)
@@ -34,21 +34,12 @@ export function DonationBox({ broadcast, room }: { broadcast: Broadcast; room: R
     ? { totalAmount: prev.totalAmount + d.amount, count: prev.count + 1, recent: [d, ...prev.recent].slice(0, 20) }
     : prev)
 
-  // 다른 시청자의 후원이 적립되면 실시간으로 합계를 갱신하고 알림을 띄운다.
-  useEffect(() => {
-    if (!room) return
-    const handler = (payload: Uint8Array, _p: unknown, _k: unknown, topic?: string) => {
-      if (topic !== 'donation') return
-      try {
-        const d = JSON.parse(new TextDecoder().decode(payload)) as Donation
-        addToSummary(d)
-        setFlash(d)
-        setTimeout(() => setFlash(cur => (cur?.id === d.id ? null : cur)), 6000)
-      } catch { /* 무시 */ }
-    }
-    room.on(RoomEvent.DataReceived, handler)
-    return () => { room.off(RoomEvent.DataReceived, handler) }
-  }, [room])
+  // 다른 시청자의 후원이 적립되면 실시간(SSE)으로 합계를 갱신하고 알림을 띄운다.
+  useServerEvent<Donation>(broadcastEvents(broadcast.id), 'donation', d => {
+    addToSummary(d)
+    setFlash(d)
+    setTimeout(() => setFlash(cur => (cur?.id === d.id ? null : cur)), 6000)
+  })
 
   const balance = wallet.balance ?? 0
   const enough = balance >= amount

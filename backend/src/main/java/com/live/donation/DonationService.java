@@ -109,14 +109,12 @@ public class DonationService {
     }
 
     private void announce(Donation d) {
-        if (d.getBroadcast().isLive()) {
-            events.publishEvent(new DonationRealtimeEvent(d.getBroadcast().getRoomName(), DonationResponse.from(d)));
-        }
+        events.publishEvent(new DonationRealtimeEvent(d.getBroadcast().getId(), DonationResponse.from(d)));
     }
 
     private static String blankToNull(String s) {
         return s == null || s.isBlank() ? null : s.strip();
     }
 
-    public record DonationRealtimeEvent(String roomName, DonationResponse donation) {}
+    public record DonationRealtimeEvent(Long broadcastId, DonationResponse donation) {}
 }
