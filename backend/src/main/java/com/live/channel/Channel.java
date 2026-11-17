@@ -26,6 +26,10 @@ public class Channel extends BaseTimeEntity {
     @Column(length = 500)
     private String description;
 
+    /** 슬로우 모드: 시청자가 채팅을 보낼 수 있는 최소 간격(초). 0 이면 끔 */
+    @Column(nullable = false)
+    private int slowModeSeconds = 0;
+
     protected Channel() {}
 
     public Channel(User owner, String handle, String name) {
@@ -39,6 +43,10 @@ public class Channel extends BaseTimeEntity {
         this.name = name;
         this.description = description;
     }
+
+    public void changeSlowMode(int seconds) { this.slowModeSeconds = seconds; }
+
+    public int getSlowModeSeconds() { return slowModeSeconds; }
 
     public boolean isOwnedBy(Long userId) { return owner.getId().equals(userId); }
 

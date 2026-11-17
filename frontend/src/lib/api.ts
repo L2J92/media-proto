@@ -52,6 +52,14 @@ export interface Channel {
 export interface FollowingItem { handle: string; name: string; ownerNickname: string; live: Broadcast | null }
 export interface LiveNotification { type: 'LIVE_STARTED'; channelHandle: string; channelName: string; broadcastId: number; title: string }
 
+export interface UserRef { id: number; nickname: string }
+export interface BanItem { user: UserRef; until: string | null; reason: string | null }
+export interface ModerationInfo {
+  ownerId: number; canModerate: boolean; isOwner: boolean; slowModeSeconds: number
+  managers: UserRef[]; bans: BanItem[]
+}
+export interface ModerationEvent { type: 'USER_BANNED' | 'USER_UNBANNED' | 'SLOW_MODE' | 'MANAGER_ADDED' | 'MANAGER_REMOVED'; userId: number | null; until: string | null; slowModeSeconds: number | null }
+
 export type VideoQualityPref = 'auto' | 'high' | 'medium' | 'low'
 export interface QoeBucket { at: string; viewers: number; avgBitrateKbps: number; avgPacketLossPct: number; avgRttMs: number; freezes: number }
 export interface QoeSummary {
@@ -156,6 +164,15 @@ export const api = {
   follow: (handle: string) => request<{ following: boolean; followerCount: number }>('POST', `/api/channels/${encodeURIComponent(handle)}/follow`),
   unfollow: (handle: string) => request<{ following: boolean; followerCount: number }>('DELETE', `/api/channels/${encodeURIComponent(handle)}/follow`),
   following: () => request<FollowingItem[]>('GET', '/api/me/following'),
+
+  moderation: (broadcastId: number) => request<ModerationInfo>('GET', `/api/broadcasts/${broadcastId}/moderation`),
+  ban: (broadcastId: number, userId: number, minutes: number | null, reason?: string) =>
+    request<BanItem>('POST', `/api/broadcasts/${broadcastId}/moderation/bans`, { userId, minutes, reason }),
+  unban: (broadcastId: number, userId: number) => request<void>('DELETE', `/api/broadcasts/${broadcastId}/moderation/bans/${userId}`),
+  setSlowMode: (broadcastId: number, seconds: number) =>
+    request<{ slowModeSeconds: number }>('PUT', `/api/broadcasts/${broadcastId}/moderation/slow-mode`, { seconds }),
+  setManager: (broadcastId: number, userId: number, manager: boolean) =>
+    request<void>(manager ? 'PUT' : 'DELETE', `/api/broadcasts/${broadcastId}/moderation/managers/${userId}`),
 
   recordings: () => request<Recording[]>('GET', '/api/recordings'),
   recording: (id: number) => request<Recording>('GET', `/api/recordings/${id}`),
