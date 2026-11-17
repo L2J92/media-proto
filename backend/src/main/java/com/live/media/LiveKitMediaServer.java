@@ -159,7 +159,8 @@ public class LiveKitMediaServer implements MediaServer {
             location = info.getFileResults(0).getLocation();
             durationMs = info.getFileResults(0).getDuration() / 1_000_000;
         }
-        return new RecordingState(finished, ok, location, durationMs);
+        String error = info.getError() == null || info.getError().isBlank() ? null : info.getError();
+        return new RecordingState(finished, ok, location, durationMs, error);
     }
 
     @Override
@@ -183,7 +184,7 @@ public class LiveKitMediaServer implements MediaServer {
                 LivekitEgress.EgressInfo info = e.getEgressInfo();
                 RecordingState state = toRecordingState(info);
                 yield new MediaEvent(MediaEvent.Type.EGRESS_ENDED, info.getRoomName(), null, info.getEgressId(),
-                        state.succeeded(), state.location(), state.durationMillis());
+                        state.succeeded(), state.location(), state.durationMillis(), state.error());
             }
             default -> MediaEvent.other();
         };

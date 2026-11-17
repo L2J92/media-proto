@@ -27,6 +27,7 @@ export interface ChatEvent { type: 'CREATED' | 'UPDATED' | 'DELETED'; chatId: nu
 export interface Recording {
   id: number; broadcastId: number; title: string; ownerNickname: string
   status: 'RECORDING' | 'COMPLETED' | 'FAILED'; durationMillis: number | null; videoUrl: string | null; recordedAt: string
+  failReason?: string | null
 }
 
 export interface ChargeOrder {

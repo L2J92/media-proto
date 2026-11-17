@@ -7,7 +7,13 @@ public record MediaEvent(
         String egressId,
         boolean egressSucceeded,
         String fileLocation,
-        long durationMillis) {
+        long durationMillis,
+        String error) {
+
+    public MediaEvent(Type type, String roomName, String participantIdentity, String egressId,
+                      boolean egressSucceeded, String fileLocation, long durationMillis) {
+        this(type, roomName, participantIdentity, egressId, egressSucceeded, fileLocation, durationMillis, null);
+    }
 
     public enum Type {
         PARTICIPANT_JOINED, PARTICIPANT_LEFT, ROOM_FINISHED, EGRESS_ENDED, OTHER

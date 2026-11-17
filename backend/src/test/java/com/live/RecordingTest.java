@@ -86,11 +86,15 @@ class RecordingTest extends IntegrationTestSupport {
         media.nextEgressId = "EG_3";
         start(owner, id);
         perform(post("/api/broadcasts/" + id + "/end"), owner, null);
-        media.recordingStates.put("EG_3", new RecordingState(true, false, null, 0));
+        media.recordingStates.put("EG_3", new RecordingState(true, false, null, 0, "S3 upload failed: access denied"));
         recordingService.pendingRecordingIds().forEach(recordingService::reconcile);
 
         JsonNode rec = recordingsOf(id).get(0);
         assertThat(rec.get("status").asText()).isEqualTo("FAILED");
         assertThat(rec.get("videoUrl").isNull()).isTrue();
+        assertThat(rec.get("failReason").isNull()).isTrue(); // 비로그인에게는 숨김
+        JsonNode ownerView = om.readTree(perform(get("/api/broadcasts/" + id + "/recordings"), owner, null)
+                .andReturn().getResponse().getContentAsString()).get(0);
+        assertThat(ownerView.get("failReason").asText()).contains("access denied");
     }
 }
