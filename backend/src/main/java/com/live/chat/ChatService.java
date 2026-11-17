@@ -25,12 +25,14 @@ public class ChatService {
     private final UserRepository userRepository;
     private final ApplicationEventPublisher events;
     private final ChatRateLimiter rateLimiter;
+    private final com.live.channel.ModerationService moderation;
     private final Clock clock;
 
     public ChatService(ChatMessageRepository chatRepository, BroadcastRepository broadcastRepository,
                        UserRepository userRepository, ApplicationEventPublisher events,
-                       ChatRateLimiter rateLimiter, Clock clock) {
+                       ChatRateLimiter rateLimiter, com.live.channel.ModerationService moderation, Clock clock) {
         this.rateLimiter = rateLimiter;
+        this.moderation = moderation;
         this.chatRepository = chatRepository;
         this.broadcastRepository = broadcastRepository;
         this.userRepository = userRepository;
@@ -51,6 +53,15 @@ public class ChatService {
     @Transactional
     public ChatResponse create(AuthUser user, Long broadcastId, ChatRequest req) {
         Broadcast b = findBroadcast(broadcastId);
+        Long ownerId = b.getOwner().getId();
+        // 채널 제재(채팅 금지·차단) → 슬로우 모드 → 도배 방지 순으로 확인
+        moderation.checkCanChat(ownerId, user.id());
+        int slow = moderation.slowModeSecondsFor(ownerId, user.id());
+        if (slow > 0) {
+            chatRepository.findFirstByBroadcastIdAndAuthorIdOrderByIdDesc(broadcastId, user.id())
+                    .filter(last -> last.getCreatedAt().plusSeconds(slow).isAfter(clock.instant()))
+                    .ifPresent(last -> { throw new ApiException(ErrorCode.SLOW_MODE); });
+        }
         rateLimiter.check(user.id());
         var author = userRepository.findById(user.id()).orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
         ChatMessage saved = chatRepository.save(new ChatMessage(b, author, req.content().strip()));
@@ -70,7 +81,12 @@ public class ChatService {
 
     @Transactional
     public void delete(AuthUser user, Long chatId) {
-        ChatMessage c = findOwned(user, chatId);
+        // 작성자 본인 또는 채널 관리자(소유자·매니저)가 삭제할 수 있다
+        ChatMessage c = chatRepository.findActiveById(chatId)
+                .orElseThrow(() -> new ApiException(ErrorCode.CHAT_NOT_FOUND));
+        if (!c.isWrittenBy(user.id()) && !moderation.canModerate(c.getBroadcast().getOwner().getId(), user.id())) {
+            throw new ApiException(ErrorCode.NOT_CHAT_AUTHOR);
+        }
         c.delete(clock.instant());
         publish(c.getBroadcast(), new ChatEvent("DELETED", c.getId(), null));
     }

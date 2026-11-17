@@ -163,3 +163,14 @@ input:focus, textarea:focus { outline: none; border-color: var(--accent); }
 .following-channel, .following-live { display: inline-flex; align-items: center; gap: .55rem; text-decoration: none; }
 .toasts { position: fixed; right: 1rem; bottom: 1rem; display: flex; flex-direction: column; gap: .5rem; z-index: 50; }
 .toast { display: flex; gap: .6rem; align-items: flex-start; padding: .75rem 1rem; background: var(--panel2); border: 1px solid var(--live); border-radius: 12px; text-decoration: none; box-shadow: 0 8px 30px rgba(0,0,0,.5); max-width: 320px; animation: pop .25s ease-out; }
+.chat-title { display: flex; align-items: center; gap: .5rem; }
+.chat-chip { font-size: .75rem; font-weight: 600; background: var(--panel2); padding: .1rem .45rem; border-radius: 999px; color: var(--muted); }
+.chat-mod-toggle { margin-left: auto; }
+.mod-panel { padding: .6rem 1rem; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: .45rem; background: var(--panel2); }
+.mod-panel select { margin-left: .5rem; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: .2rem .4rem; }
+.mod-tag { display: inline-flex; align-items: center; gap: .2rem; margin: .15rem 0 .15rem .5rem; padding: .1rem .45rem; background: var(--panel); border-radius: 999px; }
+.chat-item { position: relative; }
+.chat-menu { position: absolute; right: 0; top: 1.4rem; z-index: 5; display: flex; flex-direction: column; background: rgba(15,16,20,.97); border: 1px solid var(--line); border-radius: 8px; padding: .25rem; min-width: 140px; }
+.chat-menu button { background: none; border: 0; color: var(--text); text-align: left; padding: .4rem .6rem; border-radius: 6px; cursor: pointer; font: inherit; font-size: .85rem; }
+.chat-menu button:hover { background: var(--panel2); }
+.chat-menu button.danger { color: var(--danger); }

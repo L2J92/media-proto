@@ -16,7 +16,9 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     @Query("select c from ChatMessage c where c.broadcast.id = :broadcastId and c.deletedAt is null order by c.id desc")
     List<ChatMessage> findRecent(@Param("broadcastId") Long broadcastId, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"author", "broadcast"})
+    Optional<ChatMessage> findFirstByBroadcastIdAndAuthorIdOrderByIdDesc(Long broadcastId, Long authorId);
+
+    @EntityGraph(attributePaths = {"author", "broadcast", "broadcast.owner"})
     @Query("select c from ChatMessage c where c.id = :id and c.deletedAt is null")
     Optional<ChatMessage> findActiveById(@Param("id") Long id);
 }

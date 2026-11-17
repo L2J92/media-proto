@@ -76,6 +76,12 @@ PC 화면 공유(탭·시스템 소리 + 마이크)와 휴대폰 카메라로 �
 - 방송 화면·채널 페이지의 **+ 팔로우** → 상단 **팔로잉** 메뉴에서 팔로우한 채널을 방송 중인 순서로 확인
 - 팔로우한 채널이 방송을 시작하면 **실시간 알림 토스트**가 뜹니다(SSE `/api/realtime/me`).
 
+### 1-9. 채팅 관리 (매니저 · 채팅 금지/차단 · 슬로우 모드)
+- 채널 소유자(👑)는 채팅의 **⋯** 메뉴에서 시청자를 **매니저(🛡)** 로 지정할 수 있습니다.
+- 소유자·매니저는 남의 메시지 삭제, **1분/10분 채팅 금지, 영구 차단**, 채팅창 **⚙ 관리**에서 **슬로우 모드**(3~60초)와 제재 해제를 할 수 있습니다.
+- 제재는 **채널 단위**라 다음 방송에도 유지되고, 제재되면 그 사용자의 메시지가 모든 시청자 화면에서 바로 숨겨집니다(SSE `moderation`).
+- 서버에서 검사: 제재 중 → `403 CHAT_BANNED`, 슬로우 모드 간격 위반 → `429 SLOW_MODE`(관리자 예외), 매니저는 다른 매니저·소유자를 제재할 수 없음.
+
 ### 지원 환경
 | 기능 | 지원 |
 |---|---|
@@ -171,7 +177,7 @@ READY ──start──▶ LIVE ──end──▶ ENDED
 | POST | `/api/broadcasts/{id}/end` | 소유자 | 방송 종료(송출 중단) |
 | GET | `/api/broadcasts/{id}/viewer-token` | 누구나 | 시청 전용 토큰 |
 | GET / POST | `/api/broadcasts/{id}/chats` | 조회 누구나 / 작성 로그인 | 채팅 |
-| PATCH / DELETE | `/api/chats/{id}` | 작성자 | 채팅 수정 / 삭제 |
+| PATCH / DELETE | `/api/chats/{id}` | 작성자 (삭제는 소유자·매니저도) | 채팅 수정 / 삭제 |
 | GET | `/api/wallet` | 로그인 | 포인트 잔액·내역 |
 | POST | `/api/wallet/charges` | 로그인 | 충전 주문 생성 (`donation` 포함 시 충전하고 바로 후원) |
 | POST | `/api/wallet/charges/confirm` | 주문자 | 결제 승인 검증 → 충전(→ 후원) |
@@ -185,6 +191,10 @@ READY ──start──▶ LIVE ──end──▶ ENDED
 | GET / PATCH | `/api/me/channel` | 로그인 | 내 채널 조회·수정 |
 | POST / DELETE | `/api/channels/{handle}/follow` | 로그인 | 팔로우·언팔로우 (멱등) |
 | GET | `/api/me/following` | 로그인 | 팔로잉 목록 (방송 중 먼저) |
+| GET | `/api/broadcasts/{id}/moderation` | 누구나(목록은 관리자만) | 슬로우 모드·관리 권한·매니저·제재 목록 |
+| POST / DELETE | `/api/broadcasts/{id}/moderation/bans[/{userId}]` | 소유자·매니저 | 채팅 금지(분)·영구 차단 / 해제 |
+| PUT | `/api/broadcasts/{id}/moderation/slow-mode` | 소유자·매니저 | 슬로우 모드(초) |
+| PUT / DELETE | `/api/broadcasts/{id}/moderation/managers/{userId}` | 소유자 | 매니저 지정·해제 |
 | GET (SSE) | `/api/realtime/broadcasts/{id}` | 누구나 | 방송 이벤트 구독 (chat, donation) |
 | GET (SSE) | `/api/realtime/me` | 로그인 | 내 알림 구독 |
 | POST | `/api/webhooks/livekit` | LiveKit 서명 | 미디어 서버 이벤트 |
@@ -271,7 +281,7 @@ backend/src/main/java/com/live
 ├── recording/   HLS 녹화(Egress)·다시보기, 상태 조회 확정
 ├── qoe/         시청 품질 샘플 수집·요약(p95 등)
 ├── realtime/    이벤트 평면: RealtimePublisher, SSE 허브
-├── channel/     채널·팔로우, 방송 시작 알림
+├── channel/     채널·팔로우·방송 시작 알림, 채팅 관리(매니저·제재·슬로우 모드)
 ├── config/      Security, SPA 라우팅
 └── common/      에러 코드·예외 처리
 frontend/src
