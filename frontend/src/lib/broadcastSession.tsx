@@ -113,7 +113,7 @@ export function BroadcastSessionProvider({ children }: { children: ReactNode }) 
       const { video, screenAudio, mic } = tracks
       if (video) {
         await room.localParticipant.publishTrack(video, source === 'SCREEN'
-          ? { source: Track.Source.ScreenShare, videoEncoding: { maxBitrate: 3_000_000, maxFramerate: 30 }, simulcast: false }
+          ? { source: Track.Source.ScreenShare, videoEncoding: { maxBitrate: 3_000_000, maxFramerate: 30 }, simulcast: true }
           : { source: Track.Source.Camera, videoEncoding: VideoPresets.h720.encoding })
       }
       if (screenAudio) {

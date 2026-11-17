@@ -128,3 +128,23 @@ input:focus, textarea:focus { outline: none; border-color: var(--accent); }
 .tx-charge { color: #9fb4ff; } .tx-donation_received { color: var(--accent); }
 .tx-plus { color: var(--accent); font-weight: 700; } .tx-minus { color: var(--danger); font-weight: 700; }
 .tx-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.icon-btn.on { color: var(--accent); }
+.quality-menu { position: relative; }
+.quality-btn { font-size: .8rem; }
+.quality-menu ul { position: absolute; right: 0; bottom: 2.2rem; list-style: none; margin: 0; padding: .3rem; background: rgba(15,16,20,.95); border: 1px solid var(--line); border-radius: 8px; min-width: 100px; }
+.quality-menu li button { width: 100%; text-align: left; background: none; border: 0; color: var(--text); padding: .4rem .6rem; border-radius: 6px; cursor: pointer; font: inherit; font-size: .85rem; }
+.quality-menu li button.on, .quality-menu li button:hover { background: var(--panel2); color: var(--accent); }
+.stats-overlay { position: absolute; top: 2.6rem; left: .75rem; background: rgba(0,0,0,.72); color: #e8e9ee; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; padding: .5rem .7rem; border-radius: 6px; pointer-events: none; }
+.stats-overlay span { display: inline-block; width: 6.5em; color: var(--muted); }
+
+.qoe { margin: 1rem 0; padding: .9rem 1rem; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.qoe-head { display: flex; gap: .75rem; align-items: baseline; flex-wrap: wrap; margin-bottom: .6rem; }
+.qoe-level { font-size: .85rem; font-weight: 600; }
+.qoe-good { color: var(--accent); } .qoe-warn { color: #ffcc4d; } .qoe-bad { color: var(--danger); } .qoe-idle { color: var(--muted); }
+.qoe-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .5rem; }
+.qoe-tile { background: var(--panel2); border-radius: 8px; padding: .5rem .65rem; display: flex; flex-direction: column; gap: .15rem; }
+.qoe-tile span { color: var(--muted); font-size: .75rem; }
+.qoe-tile b { font-size: .95rem; font-variant-numeric: tabular-nums; }
+.qoe-spark { margin: .75rem 0 0; color: var(--accent); }
+.qoe-spark svg { width: 100%; height: 48px; display: block; }

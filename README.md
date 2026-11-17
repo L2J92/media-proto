@@ -66,6 +66,11 @@ PC 화면 공유(탭·시스템 소리 + 마이크)와 휴대폰 카메라로 �
 3. 재생: Safari는 네이티브 HLS, Chrome/Edge 등은 hls.js로 재생합니다(탐색·이어보기 가능).
 - 녹화 완료는 LiveKit 웹훅(`egress_ended`)과 **30초 주기 상태 조회**를 함께 사용해, 웹훅이 유실돼도 "처리 중"에 머물지 않습니다.
 
+### 1-7. 화질 선택 · 시청 품질(QoE) 모니터링
+- 시청 플레이어 하단 **⚙ 화질**: 자동 / 고화질 / 중간 / 저화질 (송출은 시뮬캐스트로 여러 화질을 동시에 보내고, 시청자가 레이어를 고름. 자동은 대역폭에 맞춰 SFU가 조절)
+- **📊 통계**(유튜브 '전문가용 통계'처럼): 해상도·FPS·코덱·비트레이트·패킷 손실·지터·RTT·프레임 드롭·끊김 — WebRTC `getStats()` 표준 통계
+- 시청자 플레이어는 10초마다 품질 샘플을 서버에 보내고, **송출 스튜디오의 "시청 품질" 패널**에서 최근 5분 보고 시청자 수, 평균 비트레이트, RTT 평균/p95, 손실률, 끊김, 화질 선택 비율, 분당 추이를 볼 수 있습니다(방송 소유자만).
+
 ### 지원 환경
 | 기능 | 지원 |
 |---|---|
@@ -161,6 +166,8 @@ READY ──start──▶ LIVE ──end──▶ ENDED
 | POST | `/api/broadcasts/{id}/donations` | 로그인(소유자 제외) | 포인트 후원 (`requestId` 멱등) |
 | GET | `/api/broadcasts/{id}/donations` | 누구나 | 누적 후원 금액·건수·최근 내역 |
 | POST | `/api/webhooks/toss` | 결제사 재조회로 검증 | 결제 상태 변경 통지 |
+| POST | `/api/broadcasts/{id}/qoe` | 누구나(시청자, 5초 간격 제한) | 시청 품질 샘플 |
+| GET | `/api/broadcasts/{id}/qoe?minutes=5` | 소유자 | 시청 품질 요약·추이 |
 | GET | `/api/recordings`, `/api/recordings/{id}` | 누구나 | 녹화 영상 |
 | POST | `/api/webhooks/livekit` | LiveKit 서명 | 미디어 서버 이벤트 |
 
@@ -243,7 +250,8 @@ backend/src/main/java/com/live
 ├── wallet/      포인트 지갑·원장, 충전 주문·승인 검증·멱등 처리
 ├── donation/    포인트 후원(대상 검증·지갑 간 이동), 실시간 알림
 ├── payment/     결제사 추상화(PaymentGateway), 토스페이먼츠 구현
-├── recording/   녹화(Egress) 메타데이터
+├── recording/   HLS 녹화(Egress)·다시보기, 상태 조회 확정
+├── qoe/         시청 품질 샘플 수집·요약(p95 등)
 ├── config/      Security, SPA 라우팅
 └── common/      에러 코드·예외 처리
 frontend/src
