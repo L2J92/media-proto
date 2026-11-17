@@ -33,7 +33,7 @@ public class RecordingService {
     @Transactional
     public void startFor(Broadcast broadcast) {
         if (!properties.enabled()) return;
-        String filePath = "recordings/broadcast-%d/%d.mp4".formatted(broadcast.getId(), clock.millis());
+        String filePath = "recordings/broadcast-%d/%d/index.m3u8".formatted(broadcast.getId(), clock.millis());
         try {
             mediaServer.startRecording(broadcast.getRoomName(), filePath)
                     .ifPresent(egressId -> recordingRepository.save(new Recording(broadcast, egressId, filePath)));
@@ -48,6 +48,25 @@ public class RecordingService {
             if (succeeded) r.complete(location, durationMillis);
             else r.fail();
         });
+    }
+
+    /**
+     * 웹훅이 오지 않아도(미설정·유실) 녹화가 "처리 중"에 머물지 않도록 미디어 서버에 직접 상태를 물어 확정한다.
+     * Recording.complete/fail 은 한 번만 바뀌므로 웹훅과 겹쳐도 안전하다.
+     */
+    @Transactional
+    public void reconcile(Long recordingId) {
+        Recording r = recordingRepository.findById(recordingId).orElse(null);
+        if (r == null || r.getStatus() != RecordingStatus.RECORDING || r.getBroadcast().isLive()) return;
+        mediaServer.findRecording(r.getEgressId()).filter(MediaServer.RecordingState::finished).ifPresent(st -> {
+            if (st.succeeded()) r.complete(st.location(), st.durationMillis());
+            else r.fail();
+        });
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> pendingRecordingIds() {
+        return recordingRepository.findByStatus(RecordingStatus.RECORDING).stream().map(Recording::getId).toList();
     }
 
     @Transactional(readOnly = true)

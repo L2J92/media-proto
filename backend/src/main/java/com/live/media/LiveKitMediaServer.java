@@ -108,7 +108,7 @@ public class LiveKitMediaServer implements MediaServer {
     }
 
     @Override
-    public Optional<String> startRecording(String roomName, String filePath) {
+    public Optional<String> startRecording(String roomName, String playlistPath) {
         RecordingProperties.S3 s3 = recordingProps.s3();
         if (!recordingProps.enabled() || s3 == null || s3.bucket() == null || s3.bucket().isBlank()) {
             return Optional.empty();
@@ -117,17 +117,49 @@ public class LiveKitMediaServer implements MediaServer {
                 .setAccessKey(s3.accessKey())
                 .setSecret(s3.secret())
                 .setBucket(s3.bucket())
-                .setRegion(s3.region() == null ? "auto" : s3.region());
+                .setRegion(s3.region() == null || s3.region().isBlank() ? "auto" : s3.region());
         if (s3.endpoint() != null && !s3.endpoint().isBlank()) {
             upload.setEndpoint(s3.endpoint()).setForcePathStyle(true);
         }
-        LivekitEgress.EncodedFileOutput output = LivekitEgress.EncodedFileOutput.newBuilder()
-                .setFileType(LivekitEgress.EncodedFileType.MP4)
-                .setFilepath(filePath)
+        String dir = playlistPath.substring(0, playlistPath.lastIndexOf('/'));
+        // HLS: 6초 세그먼트(.ts) + 플레이리스트. 파일 하나가 작아 무료 저장소의 파일 크기 제한에 걸리지 않고,
+        // 재생 시 처음부터 전부 받지 않아도 된다.
+        LivekitEgress.SegmentedFileOutput output = LivekitEgress.SegmentedFileOutput.newBuilder()
+                .setProtocol(LivekitEgress.SegmentedFileProtocol.HLS_PROTOCOL)
+                .setFilenamePrefix(dir + "/segment")
+                .setPlaylistName(playlistPath)
+                .setSegmentDuration(6)
                 .setS3(upload.build())
                 .build();
         LivekitEgress.EgressInfo info = execute(egressClient.startRoomCompositeEgress(roomName, output, "speaker"));
         return Optional.of(info.getEgressId());
+    }
+
+    @Override
+    public Optional<RecordingState> findRecording(String egressId) {
+        List<LivekitEgress.EgressInfo> list = execute(egressClient.listEgress(null, egressId));
+        if (list == null || list.isEmpty()) return Optional.empty();
+        return Optional.of(toRecordingState(list.get(0)));
+    }
+
+    private static RecordingState toRecordingState(LivekitEgress.EgressInfo info) {
+        LivekitEgress.EgressStatus st = info.getStatus();
+        boolean finished = st == LivekitEgress.EgressStatus.EGRESS_COMPLETE
+                || st == LivekitEgress.EgressStatus.EGRESS_FAILED
+                || st == LivekitEgress.EgressStatus.EGRESS_ABORTED
+                || st == LivekitEgress.EgressStatus.EGRESS_LIMIT_REACHED;
+        // 무료 한도에 걸려 중간에 끊긴 경우도 그때까지의 영상은 재생 가능하므로 성공으로 본다.
+        boolean ok = st == LivekitEgress.EgressStatus.EGRESS_COMPLETE || st == LivekitEgress.EgressStatus.EGRESS_LIMIT_REACHED;
+        String location = null;
+        long durationMs = 0;
+        if (info.getSegmentResultsCount() > 0) {
+            location = info.getSegmentResults(0).getPlaylistLocation();
+            durationMs = info.getSegmentResults(0).getDuration() / 1_000_000;
+        } else if (info.getFileResultsCount() > 0) {
+            location = info.getFileResults(0).getLocation();
+            durationMs = info.getFileResults(0).getDuration() / 1_000_000;
+        }
+        return new RecordingState(finished, ok, location, durationMs);
     }
 
     @Override
@@ -149,10 +181,9 @@ public class LiveKitMediaServer implements MediaServer {
             case "room_finished" -> new MediaEvent(MediaEvent.Type.ROOM_FINISHED, room, null, null, false, null, 0);
             case "egress_ended" -> {
                 LivekitEgress.EgressInfo info = e.getEgressInfo();
-                boolean ok = info.getStatus() == LivekitEgress.EgressStatus.EGRESS_COMPLETE;
-                String location = info.getFileResultsCount() > 0 ? info.getFileResults(0).getLocation() : null;
-                long durationMs = info.getFileResultsCount() > 0 ? info.getFileResults(0).getDuration() / 1_000_000 : 0;
-                yield new MediaEvent(MediaEvent.Type.EGRESS_ENDED, info.getRoomName(), null, info.getEgressId(), ok, location, durationMs);
+                RecordingState state = toRecordingState(info);
+                yield new MediaEvent(MediaEvent.Type.EGRESS_ENDED, info.getRoomName(), null, info.getEgressId(),
+                        state.succeeded(), state.location(), state.durationMillis());
             }
             default -> MediaEvent.other();
         };

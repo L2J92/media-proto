@@ -60,6 +60,12 @@ PC 화면 공유(탭·시스템 소리 + 마이크)와 휴대폰 카메라로 �
 5. 방송 화면에 **누적 후원 금액·건수·최근 후원**이 표시되고, 방송 중이면 💰 알림이 모든 시청자·송출자에게 실시간으로 뜹니다. 방송자 지갑에는 받은 후원이 적립됩니다.
 - 테스트 모드라 실제 결제되지 않습니다. 자신의 방송에는 후원할 수 없습니다.
 
+### 1-6. 녹화 및 다시보기 (선택 요구사항 · HLS)
+1. 방송을 시작하면 서버가 LiveKit Egress로 **HLS 녹화**(6초 세그먼트 + `index.m3u8`)를 시작해 S3 호환 저장소에 올립니다.
+2. 방송을 종료하고 약 1분 뒤 상단 **다시보기** 메뉴와 방송 상세 화면에 녹화 영상이 나타납니다.
+3. 재생: Safari는 네이티브 HLS, Chrome/Edge 등은 hls.js로 재생합니다(탐색·이어보기 가능).
+- 녹화 완료는 LiveKit 웹훅(`egress_ended`)과 **30초 주기 상태 조회**를 함께 사용해, 웹훅이 유실돼도 "처리 중"에 머물지 않습니다.
+
 ### 지원 환경
 | 기능 | 지원 |
 |---|---|
@@ -219,6 +225,11 @@ GitHub Actions(`.github/workflows/ci.yml`)가 push마다 백엔드 테스트와 
 2. Render → New → **Blueprint** → 이 저장소 선택 (`render.yaml`, Singapore 리전 — Neon DB와 같은 지역)
 3. 환경변수 6개(DB 3, LiveKit 3) 입력 → 배포
 4. (선택) LiveKit Cloud → Settings → Webhooks에 `https://<서비스>/api/webhooks/livekit` 등록
+5. (선택) 녹화: S3 호환 저장소를 만들고 `RECORDING_ENABLED=true`, `S3_*` 입력
+   - 예) **Supabase Storage**(무료, 카드 불필요): 공개 버킷 생성 → Project Settings → Storage → S3 Access Keys
+     - `S3_ENDPOINT=https://<project>.supabase.co/storage/v1/s3`, `S3_REGION=<프로젝트 리전, 예: ap-southeast-1>`
+     - `S3_PUBLIC_BASE_URL=https://<project>.supabase.co/storage/v1/object/public/<버킷>`
+   - HLS 세그먼트로 나눠 저장하므로 무료 저장소의 파일당 크기 제한에 걸리지 않습니다.
 
 ---
 

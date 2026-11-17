@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api, errorMessage, type Recording } from '../lib/api'
 import { duration, timeAgo } from '../lib/format'
+import { VodPlayer } from '../components/VodPlayer'
 
 export function RecordingsPage() {
   const [items, setItems] = useState<Recording[] | null>(null)
@@ -35,9 +36,11 @@ export function RecordingDetailPage() {
   if (!r) return <p className={error ? 'error' : 'muted'}>{error || '불러오는 중…'}</p>
   return (
     <div className="watch-main">
-      <div className="player">
-        {r.videoUrl ? <video src={r.videoUrl} controls playsInline /> : <div className="player-overlay">영상을 준비 중입니다.</div>}
-      </div>
+      {r.videoUrl ? <VodPlayer src={r.videoUrl} /> : (
+        <div className="player"><div className="player-overlay">
+          {r.status === 'FAILED' ? '녹화에 실패했습니다.' : '영상을 준비 중입니다. 방송 종료 후 1분 정도 걸릴 수 있어요.'}
+        </div></div>
+      )}
       <div className="info">
         <h1>{r.title}</h1>
         <p className="muted small">{r.ownerNickname} · {new Date(r.recordedAt).toLocaleString('ko-KR')} · {duration(r.durationMillis)}</p>

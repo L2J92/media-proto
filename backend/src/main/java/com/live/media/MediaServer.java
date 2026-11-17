@@ -31,8 +31,17 @@ public interface MediaServer {
     /** 방 안의 모든 참가자에게 서버에서 데이터 메시지를 보낸다. */
     void sendData(String roomName, String topic, byte[] payload);
 
-    /** 방 전체 화면을 파일로 녹화 시작. 녹화가 설정되지 않았으면 empty. */
-    Optional<String> startRecording(String roomName, String filePath);
+    /**
+     * 방 전체 화면을 HLS(세그먼트 + 플레이리스트)로 녹화 시작. 녹화가 설정되지 않았으면 empty.
+     * @param playlistPath 저장소 안의 플레이리스트 경로 (예: recordings/broadcast-1/1700000000/index.m3u8)
+     * @return egressId
+     */
+    Optional<String> startRecording(String roomName, String playlistPath);
+
+    /** 녹화 상태 조회 (웹훅 유실 대비). 아직 진행 중이면 finished=false. 알 수 없으면 empty. */
+    Optional<RecordingState> findRecording(String egressId);
+
+    record RecordingState(boolean finished, boolean succeeded, String location, long durationMillis) {}
 
     /** 웹훅 서명을 검증하고 필요한 정보만 꺼낸다. 서명이 틀리면 예외. */
     MediaEvent parseWebhook(String body, String authorization);
