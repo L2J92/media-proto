@@ -26,6 +26,9 @@ services:
         sync: false
       - key: TOSS_SECRET_KEY
         sync: false
+      # DB(PostgreSQL)·LiveKit 설정이 비어 있으면 서버가 뜨지 않게 막는다
+      - key: REQUIRE_PRODUCTION_CONFIG
+        value: "true"
       - key: COOKIE_SECURE
         value: "true"
       - key: DEMO_ACCOUNTS_ENABLED

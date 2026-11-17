@@ -66,6 +66,8 @@ toss:
   api-url: https://api.tosspayments.com
 
 app:
+  # 운영(render.yaml)에서 true: DB·LiveKit 설정이 없으면 기동 실패
+  require-production-config: ${REQUIRE_PRODUCTION_CONFIG:false}
   demo-accounts-enabled: ${DEMO_ACCOUNTS_ENABLED:true}
 
 management:
