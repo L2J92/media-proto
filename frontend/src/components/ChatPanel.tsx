@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { RoomEvent, type Room } from 'livekit-client'
 import { api, errorMessage, type Chat, type ChatEvent } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { Link } from 'react-router-dom'
+import { broadcastEvents, useServerEvent } from '../lib/realtime'
 
-interface Props { broadcastId: number; room: Room | null }
+interface Props { broadcastId: number }
 
-export function ChatPanel({ broadcastId, room }: Props) {
+export function ChatPanel({ broadcastId }: Props) {
   const { me } = useAuth()
   const [chats, setChats] = useState<Chat[]>([])
   const [text, setText] = useState('')
@@ -30,18 +30,8 @@ export function ChatPanel({ broadcastId, room }: Props) {
     api.chats(broadcastId).then(setChats).catch(e => setError(errorMessage(e)))
   }, [broadcastId])
 
-  // 서버가 미디어 방으로 보내는 채팅 이벤트를 반영한다.
-  useEffect(() => {
-    if (!room) return
-    const handler = (payload: Uint8Array, _p: unknown, _k: unknown, topic?: string) => {
-      if (topic !== 'chat') return
-      try {
-        applyEvent(JSON.parse(new TextDecoder().decode(payload)) as ChatEvent)
-      } catch { /* 잘못된 메시지는 무시 */ }
-    }
-    room.on(RoomEvent.DataReceived, handler)
-    return () => { room.off(RoomEvent.DataReceived, handler) }
-  }, [room, applyEvent])
+  // 서버가 보내는 채팅 이벤트(SSE)를 반영한다. 방송 중이 아니어도 동작한다.
+  useServerEvent<ChatEvent>(broadcastEvents(broadcastId), 'chat', applyEvent)
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })

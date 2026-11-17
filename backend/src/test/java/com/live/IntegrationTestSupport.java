@@ -29,9 +29,10 @@ public abstract class IntegrationTestSupport {
     @Autowired protected ObjectMapper om;
     @Autowired protected FakeMediaServer media;
     @Autowired protected FakePaymentGateway payments;
+    @Autowired protected FakeRealtime realtime;
 
     @BeforeEach
-    void resetFakes() { media.reset(); payments.reset(); }
+    void resetFakes() { media.reset(); payments.reset(); realtime.published.clear(); }
 
     /** 새 사용자로 가입하고 로그인된 세션을 돌려준다. */
     protected MockHttpSession signup(String nickname) throws Exception {

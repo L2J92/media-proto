@@ -174,7 +174,7 @@ export function StudioPage() {
 
         {error && <p className="error">{error}</p>}
         {isLive && <QoePanel broadcastId={broadcastId} />}
-        {isLive && <DonationBox broadcast={broadcast} room={mySession.room} />}
+        {isLive && <DonationBox broadcast={broadcast} />}
 
         {!isEnded && !otherSession && (
           <div className="studio-controls">
@@ -245,7 +245,7 @@ export function StudioPage() {
           </ul>
         )}
       </section>
-      {(isLive || broadcast.status === 'LIVE') && <ChatPanel broadcastId={broadcastId} room={mySession?.room ?? null} />}
+      {(isLive || broadcast.status === 'LIVE') && <ChatPanel broadcastId={broadcastId} />}
     </div>
   )
 }

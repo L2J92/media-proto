@@ -75,10 +75,9 @@ public class ChatService {
         publish(c.getBroadcast(), new ChatEvent("DELETED", c.getId(), null));
     }
 
+    /** 방송 중이 아니어도(댓글처럼) 보고 있는 사람에게 전달한다. 실제 전송은 커밋 후 */
     private void publish(Broadcast b, ChatEvent event) {
-        if (b.isLive()) {
-            events.publishEvent(new ChatRealtimeEvent(b.getRoomName(), event));
-        }
+        events.publishEvent(new ChatRealtimeEvent(b.getId(), event));
     }
 
     private Broadcast findBroadcast(Long id) {
@@ -96,5 +95,5 @@ public class ChatService {
         return c;
     }
 
-    public record ChatRealtimeEvent(String roomName, ChatEvent event) {}
+    public record ChatRealtimeEvent(Long broadcastId, ChatEvent event) {}
 }

@@ -24,7 +24,7 @@ class ChatTest extends IntegrationTestSupport {
         String body = perform(post("/api/broadcasts/" + id + "/chats"), author, "{\"content\":\"안녕하세요\"}")
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         long chatId = om.readTree(body).get("id").asLong();
-        assertThat(media.sentData).anyMatch(s -> s.contains("CREATED") && s.contains("안녕하세요"));
+        assertThat(realtime.published).anyMatch(s -> s.startsWith("broadcast:" + id + "|chat|") && s.contains("CREATED") && s.contains("안녕하세요"));
 
         // 비로그인도 조회 가능
         perform(get("/api/broadcasts/" + id + "/chats"), null, null).andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(1)));

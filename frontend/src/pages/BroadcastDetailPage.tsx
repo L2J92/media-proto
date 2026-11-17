@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import type { Room } from 'livekit-client'
 import { api, errorMessage, type Broadcast, type Recording } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { useBroadcastSession } from '../lib/broadcastSession'
@@ -17,11 +16,9 @@ export function BroadcastDetailPage() {
   const navigate = useNavigate()
   const [b, setB] = useState<Broadcast | null>(null)
   const [recordings, setRecordings] = useState<Recording[]>([])
-  const [viewerRoom, setRoom] = useState<Room | null>(null)
   const live = useBroadcastSession()
   // 내가 지금 송출 중인 방송이면 시청자로 접속하지 않는다(내 마이크 소리가 스피커로 되돌아오는 것 방지)
   const mySession = live.session?.broadcast.id === broadcastId ? live.session : null
-  const room = mySession?.room ?? viewerRoom
   const endedHere = live.ended?.broadcastId === broadcastId
   const [error, setError] = useState('')
 
@@ -53,7 +50,7 @@ export function BroadcastDetailPage() {
         {mySession ? (
           <SelfPreview track={mySession.videoTrack} viewers={mySession.viewers} studioPath={`/broadcasts/${b.id}/studio`} />
         ) : b.status === 'LIVE' ? (
-          <LivePlayer broadcastId={broadcastId} onRoom={setRoom} onEnded={load} />
+          <LivePlayer broadcastId={broadcastId} onEnded={load} />
         ) : (
           <div className="player"><div className="player-overlay">
             {b.status === 'READY' ? '방송 시작 전입니다. 시작되면 자동으로 재생됩니다.' : '종료된 방송입니다.'}
@@ -66,7 +63,7 @@ export function BroadcastDetailPage() {
             {b.source && ` · ${b.source === 'SCREEN' ? 'PC 화면' : '카메라'} 방송`}
           </p>
           {b.description && <p className="desc">{b.description}</p>}
-          <DonationBox broadcast={b} room={room} />
+          <DonationBox broadcast={b} />
           {error && <p className="error">{error}</p>}
           {isOwner && (
             <div className="owner-actions">
@@ -89,7 +86,7 @@ export function BroadcastDetailPage() {
           )}
         </div>
       </section>
-      <ChatPanel broadcastId={broadcastId} room={room} />
+      <ChatPanel broadcastId={broadcastId} />
     </div>
   )
 }

@@ -14,6 +14,12 @@ public class TestMediaConfig {
 
     @Bean
     @Primary
+    public FakeRealtime fakeRealtime() {
+        return new FakeRealtime();
+    }
+
+    @Bean
+    @Primary
     public FakePaymentGateway fakePaymentGateway() {
         return new FakePaymentGateway();
     }

@@ -3,6 +3,7 @@ package com.live.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.live.common.ErrorCode;
 import com.live.common.ErrorResponse;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -42,12 +43,15 @@ public class SecurityConfig {
                 .httpBasic(b -> b.disable())
                 .logout(l -> l.disable())
                 .authorizeHttpRequests(auth -> auth
+                        // SSE 등 비동기 응답의 재디스패치는 최초 요청에서 이미 인가됐다
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/webhooks/**").permitAll()
                         // 방송 목록·상세·시청 토큰, 채팅/녹화 조회는 비로그인 허용
                         // 시청 품질 샘플은 비로그인 시청자도 보낸다 (CSRF 토큰은 필요)
                         .requestMatchers(HttpMethod.POST, "/api/broadcasts/*/qoe").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/broadcasts/*/qoe").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/realtime/broadcasts/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/broadcasts/**", "/api/recordings/**").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
