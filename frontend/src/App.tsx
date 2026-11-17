@@ -9,6 +9,8 @@ import { LoginPage, SignupPage } from './pages/AuthPages'
 import { BroadcastFormPage } from './pages/BroadcastFormPage'
 import { MyBroadcastsPage } from './pages/MyBroadcastsPage'
 import { RecordingDetailPage, RecordingsPage } from './pages/RecordingPages'
+import { ChannelPage } from './pages/ChannelPage'
+import { FollowingPage } from './pages/FollowingPage'
 import { ChargeFailPage, ChargeSuccessPage, WalletPage } from './pages/WalletPages'
 import { WalletProvider } from './lib/wallet'
 
@@ -33,6 +35,8 @@ export default function App() {
             <Route path="/broadcasts/:id/edit" element={<RequireAuth><BroadcastFormPage /></RequireAuth>} />
             <Route path="/broadcasts/:id/studio" element={<RequireAuth><StudioPage /></RequireAuth>} />
             <Route path="/me/broadcasts" element={<RequireAuth><MyBroadcastsPage /></RequireAuth>} />
+            <Route path="/c/:handle" element={<ChannelPage />} />
+            <Route path="/following" element={<RequireAuth><FollowingPage /></RequireAuth>} />
             <Route path="/wallet" element={<RequireAuth><WalletPage /></RequireAuth>} />
             <Route path="/wallet/charge/success" element={<RequireAuth><ChargeSuccessPage /></RequireAuth>} />
             <Route path="/wallet/charge/fail" element={<ChargeFailPage />} />

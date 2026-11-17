@@ -8,7 +8,7 @@ export interface Broadcast {
   description: string | null
   status: BroadcastStatus
   source: BroadcastSource | null
-  owner: { id: number; nickname: string }
+  owner: { id: number; nickname: string; channelHandle: string | null }
   createdAt: string
   startedAt: string | null
   endedAt: string | null
@@ -43,6 +43,14 @@ export interface PointTransaction {
 }
 export interface Wallet { balance: number; transactions: PointTransaction[] }
 export interface DonationSummary { totalAmount: number; count: number; recent: Donation[] }
+
+export interface Channel {
+  id: number; handle: string; name: string; description: string | null
+  ownerId: number; ownerNickname: string; followerCount: number; following: boolean; mine: boolean
+  live: Broadcast | null
+}
+export interface FollowingItem { handle: string; name: string; ownerNickname: string; live: Broadcast | null }
+export interface LiveNotification { type: 'LIVE_STARTED'; channelHandle: string; channelName: string; broadcastId: number; title: string }
 
 export type VideoQualityPref = 'auto' | 'high' | 'medium' | 'low'
 export interface QoeBucket { at: string; viewers: number; avgBitrateKbps: number; avgPacketLossPct: number; avgRttMs: number; freezes: number }
@@ -138,6 +146,16 @@ export const api = {
   reportQoe: (broadcastId: number, sample: Record<string, number | string>) =>
     request<void>('POST', `/api/broadcasts/${broadcastId}/qoe`, sample),
   qoe: (broadcastId: number, minutes = 5) => request<QoeSummary>('GET', `/api/broadcasts/${broadcastId}/qoe?minutes=${minutes}`),
+
+  channel: (handle: string) => request<Channel>('GET', `/api/channels/${encodeURIComponent(handle)}`),
+  channelBroadcasts: (handle: string, page = 0) =>
+    request<Page<Broadcast>>('GET', `/api/channels/${encodeURIComponent(handle)}/broadcasts?page=${page}`),
+  myChannel: () => request<Channel>('GET', '/api/me/channel'),
+  updateMyChannel: (handle: string, name: string, description: string) =>
+    request<Channel>('PATCH', '/api/me/channel', { handle, name, description }),
+  follow: (handle: string) => request<{ following: boolean; followerCount: number }>('POST', `/api/channels/${encodeURIComponent(handle)}/follow`),
+  unfollow: (handle: string) => request<{ following: boolean; followerCount: number }>('DELETE', `/api/channels/${encodeURIComponent(handle)}/follow`),
+  following: () => request<FollowingItem[]>('GET', '/api/me/following'),
 
   recordings: () => request<Recording[]>('GET', '/api/recordings'),
   recording: (id: number) => request<Recording>('GET', `/api/recordings/${id}`),

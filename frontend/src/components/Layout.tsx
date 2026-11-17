@@ -4,6 +4,7 @@ import { useBroadcastSession } from '../lib/broadcastSession'
 import { useWallet } from '../lib/wallet'
 import { points } from '../lib/points'
 import { LiveSessionBar } from './LiveSessionBar'
+import { NotificationToaster } from './NotificationToaster'
 
 export function Layout() {
   const { me, logout } = useAuth()
@@ -17,6 +18,7 @@ export function Layout() {
         <nav>
           <NavLink to="/" end>방송</NavLink>
           <NavLink to="/recordings">다시보기</NavLink>
+          {me && <NavLink to="/following">팔로잉</NavLink>}
           {me && <NavLink to="/me/broadcasts">내 방송</NavLink>}
         </nav>
         <div className="header-right">
@@ -42,6 +44,7 @@ export function Layout() {
         </div>
       </header>
       <LiveSessionBar />
+      <NotificationToaster />
       <main className="container">
         <Outlet />
       </main>

@@ -7,6 +7,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { LivePlayer } from '../components/LivePlayer'
 import { ChatPanel } from '../components/ChatPanel'
 import { DonationBox } from '../components/DonationBox'
+import { FollowButton } from '../components/FollowButton'
 import { duration, timeAgo } from '../lib/format'
 
 export function BroadcastDetailPage() {
@@ -58,8 +59,14 @@ export function BroadcastDetailPage() {
         )}
         <div className="info">
           <h1>{b.title} <StatusBadge status={b.status} /></h1>
+          <div className="owner-line">
+            {b.owner.channelHandle
+              ? <Link to={`/c/${b.owner.channelHandle}`} className="owner-link"><span className="avatar sm">{b.owner.nickname.slice(0, 1)}</span>{b.owner.nickname}</Link>
+              : <span>{b.owner.nickname}</span>}
+            {b.owner.channelHandle && !isOwner && <ChannelFollow handle={b.owner.channelHandle} />}
+          </div>
           <p className="muted small">
-            {b.owner.nickname} · {b.status === 'LIVE' ? `${timeAgo(b.startedAt)} 시작` : b.status === 'ENDED' ? `${timeAgo(b.endedAt)} 종료` : `${timeAgo(b.createdAt)} 등록`}
+            {b.status === 'LIVE' ? `${timeAgo(b.startedAt)} 시작` : b.status === 'ENDED' ? `${timeAgo(b.endedAt)} 종료` : `${timeAgo(b.createdAt)} 등록`}
             {b.source && ` · ${b.source === 'SCREEN' ? 'PC 화면' : '카메라'} 방송`}
           </p>
           {b.description && <p className="desc">{b.description}</p>}
@@ -105,4 +112,15 @@ function SelfPreview({ track, viewers, studioPath }: { track: MediaStreamTrack |
       <Link className="btn btn-sm self-preview-note" to={studioPath}>내 송출 미리보기 · 스튜디오로</Link>
     </div>
   )
+}
+
+/** 방송 화면의 팔로우 버튼: 채널의 현재 팔로우 상태를 불러와 표시한다 */
+function ChannelFollow({ handle }: { handle: string }) {
+  const [state, setState] = useState<{ following: boolean; count: number } | null>(null)
+  useEffect(() => {
+    api.channel(handle).then(c => setState({ following: c.following, count: c.followerCount })).catch(() => {})
+  }, [handle])
+  if (!state) return null
+  return <FollowButton key={String(state.following)} handle={handle} initial={state.following} count={state.count}
+    onChange={(f, c) => setState({ following: f, count: c })} />
 }

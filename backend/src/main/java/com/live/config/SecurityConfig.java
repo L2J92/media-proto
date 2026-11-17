@@ -52,6 +52,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/broadcasts/*/qoe").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/broadcasts/*/qoe").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/realtime/broadcasts/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/channels/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/broadcasts/**", "/api/recordings/**").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())

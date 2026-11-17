@@ -32,6 +32,17 @@ public interface BroadcastRepository extends JpaRepository<Broadcast, Long> {
     @EntityGraph(attributePaths = "owner")
     Optional<Broadcast> findByRoomName(String roomName);
 
+    @EntityGraph(attributePaths = "owner")
+    @Query(value = """
+            select b from Broadcast b where b.owner.id = :ownerId and b.deletedAt is null
+            order by case when b.status = com.live.broadcast.BroadcastStatus.LIVE then 0 else 1 end, b.id desc
+            """, countQuery = "select count(b) from Broadcast b where b.owner.id = :ownerId and b.deletedAt is null")
+    Page<Broadcast> findByOwner(@Param("ownerId") Long ownerId, Pageable pageable);
+
+    @EntityGraph(attributePaths = "owner")
+    @Query("select b from Broadcast b where b.owner.id = :ownerId and b.deletedAt is null and b.status = com.live.broadcast.BroadcastStatus.LIVE order by b.id desc")
+    List<Broadcast> findLiveByOwner(@Param("ownerId") Long ownerId);
+
     List<Broadcast> findByStatus(BroadcastStatus status);
 
     List<Broadcast> findByStatusAndRoomClosedFalse(BroadcastStatus status);

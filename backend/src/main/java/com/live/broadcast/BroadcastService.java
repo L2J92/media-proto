@@ -30,12 +30,17 @@ public class BroadcastService {
     private final MediaServer mediaServer;
     private final RecordingService recordingService;
     private final ViewerCountService viewerCounts;
+    private final OwnerHandleLookup handleLookup;
+    private final org.springframework.context.ApplicationEventPublisher events;
     private final Clock clock;
 
     public BroadcastService(BroadcastRepository broadcastRepository, UserRepository userRepository,
                             MediaServer mediaServer, RecordingService recordingService,
-                            ViewerCountService viewerCounts, Clock clock) {
+                            ViewerCountService viewerCounts, OwnerHandleLookup handleLookup,
+                            org.springframework.context.ApplicationEventPublisher events, Clock clock) {
         this.viewerCounts = viewerCounts;
+        this.handleLookup = handleLookup;
+        this.events = events;
         this.broadcastRepository = broadcastRepository;
         this.userRepository = userRepository;
         this.mediaServer = mediaServer;
@@ -52,14 +57,36 @@ public class BroadcastService {
     @Transactional(readOnly = true)
     public PageResponse<BroadcastResponse> list(BroadcastStatus status, int page, int size) {
         Page<Broadcast> result = broadcastRepository.search(status, PageRequest.of(Math.max(page, 0), Math.clamp(size, 1, 50)));
-        return new PageResponse<>(result.map(b -> BroadcastResponse.from(b, viewerCounts.viewerCount(b))).getContent(),
+        return toPage(result);
+    }
+
+    /** 채널 페이지: 한 사용자의 방송 회차 목록 */
+    @Transactional(readOnly = true)
+    public PageResponse<BroadcastResponse> byOwner(Long ownerId, int page, int size) {
+        return toPage(broadcastRepository.findByOwner(ownerId, PageRequest.of(Math.max(page, 0), Math.clamp(size, 1, 50))));
+    }
+
+    /** 사용자가 지금 방송 중이면 그 방송 */
+    @Transactional(readOnly = true)
+    public java.util.Optional<BroadcastResponse> liveOf(Long ownerId) {
+        return broadcastRepository.findLiveByOwner(ownerId).stream().findFirst().map(this::toResponse);
+    }
+
+    private PageResponse<BroadcastResponse> toPage(Page<Broadcast> result) {
+        var handles = handleLookup.handles(result.getContent().stream().map(b -> b.getOwner().getId()).toList());
+        return new PageResponse<>(result.map(b -> BroadcastResponse.from(b, viewerCounts.viewerCount(b),
+                        handles.get(b.getOwner().getId()))).getContent(),
                 result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages());
     }
 
     @Transactional(readOnly = true)
     public BroadcastResponse get(Long id) {
-        Broadcast b = find(id);
-        return BroadcastResponse.from(b, viewerCounts.viewerCount(b));
+        return toResponse(find(id));
+    }
+
+    private BroadcastResponse toResponse(Broadcast b) {
+        String handle = handleLookup.handles(java.util.List.of(b.getOwner().getId())).get(b.getOwner().getId());
+        return BroadcastResponse.from(b, viewerCounts.viewerCount(b), handle);
     }
 
     @Transactional(readOnly = true)
@@ -108,6 +135,7 @@ public class BroadcastService {
         mediaServer.createRoom(roomName);
         b.start(roomName, req.source(), clock.instant());
         recordingService.startFor(b);
+        events.publishEvent(new BroadcastStartedEvent(b.getId(), b.getOwner().getId(), b.getTitle()));
         return publisherConnection(user, b);
     }
 
