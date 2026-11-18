@@ -4,6 +4,7 @@ import { api, errorMessage, type Broadcast, type BroadcastStatus } from '../lib/
 import { StatusBadge } from '../components/StatusBadge'
 import { timeAgo } from '../lib/format'
 
+// 기본(전체)은 방송 중·대기만. 종료된 방송은 '종료' 탭, 채널의 지난 방송, 다시보기에서 본다.
 const FILTERS: { label: string; value?: BroadcastStatus }[] = [
   { label: '전체' }, { label: '방송 중', value: 'LIVE' }, { label: '대기', value: 'READY' }, { label: '종료', value: 'ENDED' },
 ]

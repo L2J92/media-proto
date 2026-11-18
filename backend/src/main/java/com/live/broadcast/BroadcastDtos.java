@@ -13,7 +13,8 @@ public final class BroadcastDtos {
             @NotBlank(message = "제목을 입력하세요.") @Size(max = 100) String title,
             @Size(max = 1000) String description) {}
 
-    public record StartRequest(@NotNull BroadcastSource source) {}
+    /** record: 방송 시작과 함께 녹화할지 (생략하면 true) */
+    public record StartRequest(@NotNull BroadcastSource source, Boolean record) {}
 
     /** channelHandle: 채널 페이지 주소(/c/{handle}) */
     public record OwnerDto(Long id, String nickname, String channelHandle) {}

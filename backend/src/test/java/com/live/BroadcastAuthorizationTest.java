@@ -130,6 +130,21 @@ class BroadcastAuthorizationTest extends IntegrationTestSupport {
         }
 
         @Test
+        @DisplayName("종료된 방송은 기본 목록에서 빠지고 종료 목록에서만 보인다")
+        void endedBroadcastLeavesDefaultList() throws Exception {
+            MockHttpSession owner = signup("owner");
+            long id = createBroadcast(owner, "끝난 방송");
+            start(owner, id);
+            perform(post("/api/broadcasts/" + id + "/end"), owner, null).andExpect(status().isOk());
+
+            String def = perform(get("/api/broadcasts?size=50"), null, null).andReturn().getResponse().getContentAsString();
+            String ended = perform(get("/api/broadcasts?status=ENDED&size=50"), null, null).andReturn().getResponse().getContentAsString();
+            assertThat(om.readTree(def).get("items")).noneMatch(b -> b.get("id").asLong() == id);
+            assertThat(om.readTree(ended).get("items")).anyMatch(b -> b.get("id").asLong() == id);
+            perform(get("/api/broadcasts/" + id), null, null).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ENDED"));
+        }
+
+        @Test
         void viewerTokenNotIssuedBeforeStart() throws Exception {
             long id = createBroadcast(signup("owner"), "대기 방송");
             perform(get("/api/broadcasts/" + id + "/viewer-token"), null, null)

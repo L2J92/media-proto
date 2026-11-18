@@ -38,6 +38,9 @@ public interface MediaServer {
      */
     Optional<String> startRecording(String roomName, String playlistPath);
 
+    /** 녹화 중지 요청. 이미 끝난 녹화면 무시한다. */
+    void stopRecording(String egressId);
+
     /** 녹화 상태 조회 (웹훅 유실 대비). 아직 진행 중이면 finished=false. 알 수 없으면 empty. */
     Optional<RecordingState> findRecording(String egressId);
 

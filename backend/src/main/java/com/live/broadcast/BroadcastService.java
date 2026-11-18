@@ -134,7 +134,7 @@ public class BroadcastService {
         String roomName = "bc-" + b.getId() + "-" + UUID.randomUUID().toString().substring(0, 8);
         mediaServer.createRoom(roomName);
         b.start(roomName, req.source(), clock.instant());
-        recordingService.startFor(b);
+        if (req.record() == null || req.record()) recordingService.startFor(b);
         events.publishEvent(new BroadcastStartedEvent(b.getId(), b.getOwner().getId(), b.getTitle()));
         return publisherConnection(user, b);
     }

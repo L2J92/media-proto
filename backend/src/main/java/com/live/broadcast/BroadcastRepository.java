@@ -19,10 +19,14 @@ public interface BroadcastRepository extends JpaRepository<Broadcast, Long> {
     @EntityGraph(attributePaths = "owner")
     @Query(value = """
             select b from Broadcast b
-            where b.deletedAt is null and (:status is null or b.status = :status)
+            where b.deletedAt is null
+              and ((:status is null and b.status <> com.live.broadcast.BroadcastStatus.ENDED) or b.status = :status)
             order by case when b.status = com.live.broadcast.BroadcastStatus.LIVE then 0 else 1 end, b.id desc
             """,
-            countQuery = "select count(b) from Broadcast b where b.deletedAt is null and (:status is null or b.status = :status)")
+            countQuery = """
+            select count(b) from Broadcast b where b.deletedAt is null
+              and ((:status is null and b.status <> com.live.broadcast.BroadcastStatus.ENDED) or b.status = :status)
+            """)
     Page<Broadcast> search(@Param("status") BroadcastStatus status, Pageable pageable);
 
     @EntityGraph(attributePaths = "owner")
