@@ -178,3 +178,5 @@ input:focus, textarea:focus { outline: none; border-color: var(--accent); }
 .rec-control { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin: 1rem 0 0; padding: .6rem .9rem; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
 .rec-dot { color: var(--live); font-weight: 800; font-variant-numeric: tabular-nums; animation: blink 1.4s infinite; }
 .rec-check { display: inline-flex; align-items: center; gap: .35rem; color: var(--muted); }
+.my-item { display: flex; flex-direction: column; gap: .5rem; }
+.my-item .btn { align-self: flex-start; }
