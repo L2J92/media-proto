@@ -28,6 +28,10 @@ public class Recording extends BaseTimeEntity {
 
     private Long durationMillis;
 
+    /** 방송자가 녹화 중지를 요청함 (방송 중이어도 완료 확정 대상) */
+    @Column(nullable = false)
+    private boolean stopRequested = false;
+
     /** 실패 사유 (미디어 서버가 보고한 오류) */
     @Column(length = 300)
     private String failReason;
@@ -59,6 +63,13 @@ public class Recording extends BaseTimeEntity {
     }
 
     public String getFailReason() { return failReason; }
+
+    public void requestStop() { this.stopRequested = true; }
+
+    public boolean isStopRequested() { return stopRequested; }
+
+    /** 지금 실제로 녹화 중인지 (중지 요청 전) */
+    public boolean isActive() { return status == RecordingStatus.RECORDING && !stopRequested; }
 
     public Long getId() { return id; }
     public Broadcast getBroadcast() { return broadcast; }

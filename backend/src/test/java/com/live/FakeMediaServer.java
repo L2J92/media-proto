@@ -18,10 +18,11 @@ public class FakeMediaServer implements MediaServer {
     public String nextEgressId = null;
     public final Map<String, String> startedRecordings = new ConcurrentHashMap<>(); // egressId -> playlistPath
     public final Map<String, RecordingState> recordingStates = new ConcurrentHashMap<>();
+    public final List<String> stoppedRecordings = Collections.synchronizedList(new ArrayList<>());
 
     public void reset() {
         rooms.clear(); participants.clear(); sentData.clear(); failDelete = false; nextWebhook = MediaEvent.other();
-        nextEgressId = null; startedRecordings.clear(); recordingStates.clear();
+        nextEgressId = null; startedRecordings.clear(); recordingStates.clear(); stoppedRecordings.clear();
     }
 
     @Override public boolean isConfigured() { return true; }
@@ -43,6 +44,7 @@ public class FakeMediaServer implements MediaServer {
         startedRecordings.put(nextEgressId, playlistPath);
         return Optional.of(nextEgressId);
     }
+    @Override public void stopRecording(String egressId) { stoppedRecordings.add(egressId); }
     @Override public Optional<RecordingState> findRecording(String egressId) { return Optional.ofNullable(recordingStates.get(egressId)); }
 
     @Override public MediaEvent parseWebhook(String body, String authorization) {

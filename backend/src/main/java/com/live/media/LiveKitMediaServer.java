@@ -136,6 +136,17 @@ public class LiveKitMediaServer implements MediaServer {
     }
 
     @Override
+    public void stopRecording(String egressId) {
+        try {
+            Response<LivekitEgress.EgressInfo> res = egressClient.stopEgress(egressId).execute();
+            // 이미 끝난 녹화는 오류로 오지만, 중지 목적은 달성된 것이므로 무시한다
+            if (!res.isSuccessful() && res.code() >= 500) throw new ApiException(ErrorCode.MEDIA_SERVER_ERROR);
+        } catch (IOException e) {
+            throw new ApiException(ErrorCode.MEDIA_SERVER_ERROR, e);
+        }
+    }
+
+    @Override
     public Optional<RecordingState> findRecording(String egressId) {
         List<LivekitEgress.EgressInfo> list = execute(egressClient.listEgress(null, egressId));
         if (list == null || list.isEmpty()) return Optional.empty();

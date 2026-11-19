@@ -8,6 +8,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { ChatPanel } from '../components/ChatPanel'
 import { DonationBox } from '../components/DonationBox'
 import { QoePanel } from '../components/QoePanel'
+import { RecordingControl } from '../components/RecordingControl'
 
 /**
  * 송출 화면. 장치(화면/카메라/마이크)를 먼저 고른 뒤 송출을 시작하면
@@ -31,11 +32,15 @@ export function StudioPage() {
   const [hasSystemAudio, setHasSystemAudio] = useState(false)
   const [hasMic, setHasMic] = useState(false)
   const [facing, setFacing] = useState<'user' | 'environment'>('user')
+  const [recordingEnabled, setRecordingEnabled] = useState(false)
+  const [recordOnStart, setRecordOnStart] = useState(true)
 
   const previewRef = useRef<HTMLVideoElement>(null)
   /** 송출 시작 전 미리보기용 장치. 송출이 시작되면 세션으로 넘긴다. */
   const draftRef = useRef<MediaTracks>({})
   const onScreenEndedRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => { api.config().then(c => setRecordingEnabled(c.recordingEnabled)).catch(() => {}) }, [])
 
   useEffect(() => {
     api.broadcast(broadcastId).then(b => {
@@ -114,7 +119,7 @@ export function StudioPage() {
     if (tracks.video && onScreenEndedRef.current) tracks.video.removeEventListener('ended', onScreenEndedRef.current)
     draftRef.current = {}
     try {
-      await live.goLive(broadcast, source, tracks, facing)
+      await live.goLive(broadcast, source, tracks, facing, recordingEnabled && recordOnStart)
       setPrepared(false)
     } catch (e) {
       draftRef.current = tracks // 실패하면 다시 미리보기 상태로
@@ -173,6 +178,7 @@ export function StudioPage() {
         </div>
 
         {error && <p className="error">{error}</p>}
+        {isLive && recordingEnabled && <RecordingControl broadcastId={broadcastId} />}
         {isLive && <QoePanel broadcastId={broadcastId} />}
         {isLive && <DonationBox broadcast={broadcast} />}
 
@@ -194,6 +200,11 @@ export function StudioPage() {
               <button className="btn" onClick={prepareMedia}>
                 {prepared ? '다시 선택' : source === 'SCREEN' ? '화면·마이크 선택' : '카메라·마이크 켜기'}
               </button>
+            )}
+            {!isLive && prepared && !connecting && recordingEnabled && broadcast.status !== 'LIVE' && (
+              <label className="small rec-check">
+                <input type="checkbox" checked={recordOnStart} onChange={e => setRecordOnStart(e.target.checked)} /> 시작과 함께 녹화
+              </label>
             )}
             {!isLive && prepared && !connecting && (
               <button className="btn btn-primary" onClick={goLive}>

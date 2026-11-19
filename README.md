@@ -45,7 +45,7 @@ PC 화면 공유(탭·시스템 소리 + 마이크)와 휴대폰 카메라로 �
    - 송출 중에 사이트 안의 다른 페이지(목록·다른 방송 등)로 이동해도 **방송이 계속**되며, 상단 빨간 바에서 시청자 수 확인·스튜디오 복귀·종료를 할 수 있습니다.
 5. **다른 기기(휴대폰 등)**에서 서비스 주소 접속 → 방송 목록의 `LIVE` 방송 클릭 → 영상 재생, **🔊 소리 켜기** 클릭 시 화면 소리 + 마이크 음성 재생
    - 플레이어에서 시청자 수(👁), 볼륨·음소거, 전체 화면을 사용할 수 있고, 네트워크가 끊기면 “다시 연결하는 중” 표시 후 자동 복구됩니다.
-6. 송출 화면에서 **방송 종료** → 시청 화면이 “방송이 종료되었습니다”로 바뀌고 목록에서 `종료` 상태로 표시
+6. 송출 화면에서 **방송 종료** → 시청 화면이 “방송이 종료되었습니다”로 바뀌고, 방송은 1회용이라 메인 목록 기본 화면에서 내려갑니다(목록의 **종료** 탭, 채널의 지난 방송, 다시보기에서 확인)
    - 브라우저의 “공유 중지”를 눌러도 방송이 종료됩니다.
 
 ### 1-2. 모바일 라이브 방송 (카메라 + 마이크)
@@ -81,8 +81,9 @@ PC 화면 공유(탭·시스템 소리 + 마이크)와 휴대폰 카메라로 �
 - 테스트 모드라 실제 결제되지 않습니다. 자신의 방송에는 후원할 수 없습니다.
 
 ### 1-6. 녹화 및 다시보기 (선택 요구사항 · HLS)
-1. 방송을 시작하면 서버가 LiveKit Egress로 **HLS 녹화**(6초 세그먼트 + `index.m3u8`)를 시작해 S3 호환 저장소에 올립니다.
-2. 방송을 종료하고 약 1분 뒤 상단 **다시보기** 메뉴와 방송 상세 화면에 녹화 영상이 나타납니다.
+1. 송출 화면에서 **"시작과 함께 녹화"**(기본 켬)로 방송을 시작하거나, 방송 중 **● 녹화 시작 / ■ 녹화 중지** 버튼으로 원하는 구간만 녹화합니다(방송자만, 동시에 1개, 여러 구간 가능).
+   - 서버가 LiveKit Egress로 **HLS 녹화**(6초 세그먼트 + `index.m3u8`)를 시작해 S3 호환 저장소에 올립니다.
+2. 녹화를 중지하거나 방송을 종료하고 약 1분 뒤 상단 **다시보기** 메뉴와 방송 상세 화면에 녹화 영상이 나타납니다.
 3. 재생: Safari는 네이티브 HLS, Chrome/Edge 등은 hls.js로 재생합니다(탐색·이어보기 가능).
 - 녹화 완료는 LiveKit 웹훅(`egress_ended`)과 **30초 주기 상태 조회**를 함께 사용해, 웹훅이 유실돼도 "처리 중"에 머물지 않습니다.
 
@@ -190,7 +191,7 @@ READY ──start──▶ LIVE ──end──▶ ENDED
 | POST | `/api/auth/signup` · `/login` · `/logout` | - | 회원가입·로그인·로그아웃 |
 | POST | `/api/auth/demo-login?account=STREAMER\|STREAMER2\|VIEWER` | - | 평가용 테스트 계정 로그인 |
 | GET | `/api/auth/me` | 로그인 | 내 정보 |
-| GET | `/api/broadcasts?status=&page=` | 누구나 | 방송 목록 (LIVE 우선) |
+| GET | `/api/broadcasts?status=&page=` | 누구나 | 방송 목록 (기본: 방송 중·대기, LIVE 우선 / `status=ENDED` 종료) |
 | GET | `/api/broadcasts/{id}` | 누구나 | 방송 상세 |
 | POST | `/api/broadcasts` | 로그인 | 방송 등록 |
 | PATCH / DELETE | `/api/broadcasts/{id}` | 소유자 | 수정 / 삭제(방송 중이면 종료 후 삭제) |
@@ -208,7 +209,9 @@ READY ──start──▶ LIVE ──end──▶ ENDED
 | POST | `/api/webhooks/toss` | 결제사 재조회로 검증 | 결제 상태 변경 통지 |
 | POST | `/api/broadcasts/{id}/qoe` | 누구나(시청자, 5초 간격 제한) | 시청 품질 샘플 |
 | GET | `/api/broadcasts/{id}/qoe?minutes=5` | 소유자 | 시청 품질 요약·추이 |
+| POST | `/api/broadcasts/{id}/recordings/start` · `/stop` | 소유자(방송 중) | 녹화 시작·중지 |
 | GET | `/api/recordings`, `/api/recordings/{id}` | 누구나 | 녹화 영상 |
+| GET | `/api/config` | 누구나 | 녹화·결제 사용 가능 여부 |
 | GET | `/api/channels/{handle}`, `/api/channels/{handle}/broadcasts` | 누구나 | 채널 정보(팔로워 수·방송 중)·방송 회차 |
 | GET / PATCH | `/api/me/channel` | 로그인 | 내 채널 조회·수정 |
 | POST / DELETE | `/api/channels/{handle}/follow` | 로그인 | 팔로우·언팔로우 (멱등) |

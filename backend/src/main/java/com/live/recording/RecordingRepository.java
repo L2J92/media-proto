@@ -13,6 +13,9 @@ public interface RecordingRepository extends JpaRepository<Recording, Long> {
 
     List<Recording> findByStatus(RecordingStatus status);
 
+    @Query("select r from Recording r where r.broadcast.id = :broadcastId and r.status = com.live.recording.RecordingStatus.RECORDING and r.stopRequested = false")
+    List<Recording> findActive(@Param("broadcastId") Long broadcastId);
+
     @EntityGraph(attributePaths = {"broadcast", "broadcast.owner"})
     @Query("select r from Recording r where r.status = :status and r.broadcast.deletedAt is null order by r.id desc")
     List<Recording> findVisible(@Param("status") RecordingStatus status);

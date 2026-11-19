@@ -13,6 +13,7 @@ import org.springframework.test.context.TestPropertySource;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @TestPropertySource(properties = {
@@ -77,6 +78,49 @@ class RecordingTest extends IntegrationTestSupport {
         mvc.perform(post("/api/webhooks/livekit").header("Authorization", "valid").content("{}")).andExpect(status().isOk());
 
         assertThat(recordingsOf(id).get(0).get("status").asText()).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    @DisplayName("방송자가 방송 중에 녹화를 시작·중지하고, 중지한 녹화는 방송 중에도 다시보기로 확정된다")
+    void manualStartStop() throws Exception {
+        MockHttpSession owner = signup("owner");
+        MockHttpSession other = signup("other");
+        long id = createBroadcast(owner, "수동 녹화");
+        // 자동 녹화 끄고 시작
+        perform(post("/api/broadcasts/" + id + "/start"), owner, "{\"source\":\"CAMERA\",\"record\":false}")
+                .andExpect(status().isOk());
+        assertThat(recordingsOf(id)).isEmpty();
+
+        media.nextEgressId = "EG_M1";
+        perform(post("/api/broadcasts/" + id + "/recordings/start"), other, null).andExpect(status().isForbidden());
+        perform(post("/api/broadcasts/" + id + "/recordings/start"), owner, null).andExpect(status().isOk());
+        perform(post("/api/broadcasts/" + id + "/recordings/start"), owner, null)
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("RECORDING_ALREADY_ACTIVE"));
+
+        perform(post("/api/broadcasts/" + id + "/recordings/stop"), owner, null)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.stopRequested").value(true));
+        assertThat(media.stoppedRecordings).containsExactly("EG_M1");
+        perform(post("/api/broadcasts/" + id + "/recordings/stop"), owner, null)
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("RECORDING_NOT_ACTIVE"));
+
+        // 방송은 계속 중이지만, 중지한 녹화는 확정된다
+        media.recordingStates.put("EG_M1", new RecordingState(true, true, "loc", 30_000));
+        recordingService.pendingRecordingIds().forEach(recordingService::reconcile);
+        assertThat(recordingsOf(id).get(0).get("status").asText()).isEqualTo("COMPLETED");
+
+        // 다시 녹화 시작 가능 (두 번째 구간)
+        media.nextEgressId = "EG_M2";
+        perform(post("/api/broadcasts/" + id + "/recordings/start"), owner, null).andExpect(status().isOk());
+        assertThat(recordingsOf(id)).hasSize(2);
+    }
+
+    @Test
+    void recordingControlRequiresLive() throws Exception {
+        MockHttpSession owner = signup("owner");
+        long id = createBroadcast(owner, "대기 방송");
+        perform(post("/api/broadcasts/" + id + "/recordings/start"), owner, null).andExpect(status().isConflict());
+        perform(post("/api/broadcasts/" + id + "/recordings/start"), null, null).andExpect(status().isUnauthorized());
+        perform(get("/api/config"), null, null).andExpect(jsonPath("$.recordingEnabled").value(true));
     }
 
     @Test

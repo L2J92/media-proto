@@ -28,6 +28,7 @@ export interface Recording {
   id: number; broadcastId: number; title: string; ownerNickname: string
   status: 'RECORDING' | 'COMPLETED' | 'FAILED'; durationMillis: number | null; videoUrl: string | null; recordedAt: string
   failReason?: string | null
+  stopRequested?: boolean
 }
 
 export interface ChargeOrder {
@@ -132,7 +133,11 @@ export const api = {
   updateBroadcast: (id: number, title: string, description: string) =>
     request<Broadcast>('PATCH', `/api/broadcasts/${id}`, { title, description }),
   deleteBroadcast: (id: number) => request<void>('DELETE', `/api/broadcasts/${id}`),
-  start: (id: number, source: BroadcastSource) => request<Connection>('POST', `/api/broadcasts/${id}/start`, { source }),
+  start: (id: number, source: BroadcastSource, record = true) =>
+    request<Connection>('POST', `/api/broadcasts/${id}/start`, { source, record }),
+  config: () => request<{ recordingEnabled: boolean; paymentsEnabled: boolean; demoAccountsEnabled: boolean }>('GET', '/api/config'),
+  startRecording: (id: number) => request<Recording>('POST', `/api/broadcasts/${id}/recordings/start`),
+  stopRecording: (id: number) => request<Recording>('POST', `/api/broadcasts/${id}/recordings/stop`),
   publisherToken: (id: number) => request<Connection>('POST', `/api/broadcasts/${id}/publisher-token`),
   end: (id: number) => request<Broadcast>('POST', `/api/broadcasts/${id}/end`),
   viewerToken: (id: number) => request<Connection>('GET', `/api/broadcasts/${id}/viewer-token`),

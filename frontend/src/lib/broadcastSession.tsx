@@ -26,7 +26,7 @@ interface EndedNotice { broadcastId: number; reason?: string; broadcast?: Broadc
 interface Ctx {
   session: LiveSession | null
   ended: EndedNotice | null
-  goLive: (broadcast: Broadcast, source: BroadcastSource, tracks: MediaTracks, facing: 'user' | 'environment') => Promise<void>
+  goLive: (broadcast: Broadcast, source: BroadcastSource, tracks: MediaTracks, facing: 'user' | 'environment', record?: boolean) => Promise<void>
   end: (reason?: string) => Promise<void>
   toggleMic: () => void
   switchCamera: () => Promise<void>
@@ -85,14 +85,14 @@ export function BroadcastSessionProvider({ children }: { children: ReactNode }) 
   }, [cleanup])
 
   const goLive = useCallback(async (broadcast: Broadcast, source: BroadcastSource, tracks: MediaTracks,
-                                     facing: 'user' | 'environment') => {
+                                     facing: 'user' | 'environment', record = true) => {
     if (sessionRef.current) throw new Error('이미 다른 방송을 송출 중입니다.')
     setEnded(null)
     const lk = lkRef.current ?? (lkRef.current = await import('livekit-client'))
     const { Room, RoomEvent, Track, AudioPresets, VideoPresets } = lk
     const conn = broadcast.status === 'LIVE'
       ? await api.publisherToken(broadcast.id)   // 새로고침 후 재접속
-      : await api.start(broadcast.id, source)
+      : await api.start(broadcast.id, source, record)
     const room = new Room({ adaptiveStream: false, dynacast: true, publishDefaults: { simulcast: true } })
     const countViewers = () => update({
       viewers: [...room.remoteParticipants.values()].filter(p => p.identity.startsWith('viewer-')).length,
