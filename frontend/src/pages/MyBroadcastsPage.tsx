@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, errorMessage, type Broadcast } from '../lib/api'
 import { BroadcastCard } from './HomePage'
+import { RerunButton } from '../components/RerunButton'
 
 export function MyBroadcastsPage() {
   const [items, setItems] = useState<Broadcast[] | null>(null)
@@ -15,7 +16,16 @@ export function MyBroadcastsPage() {
       </div>
       {error && <p className="error">{error}</p>}
       {items?.length === 0 && <p className="muted">아직 만든 방송이 없습니다.</p>}
-      <div className="grid">{items?.map(b => <BroadcastCard key={b.id} b={b} />)}</div>
+      <div className="grid">
+        {items?.map(b => (
+          <div key={b.id} className="my-item">
+            <BroadcastCard b={b} />
+            {b.status === 'ENDED'
+              ? <RerunButton broadcast={b} className="btn btn-sm" />
+              : <Link className="btn btn-sm btn-primary" to={`/broadcasts/${b.id}/studio`}>{b.status === 'LIVE' ? '송출 화면' : '송출하러 가기'}</Link>}
+          </div>
+        ))}
+      </div>
     </>
   )
 }

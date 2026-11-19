@@ -8,6 +8,7 @@ import { LivePlayer } from '../components/LivePlayer'
 import { ChatPanel } from '../components/ChatPanel'
 import { DonationBox } from '../components/DonationBox'
 import { FollowButton } from '../components/FollowButton'
+import { RerunButton } from '../components/RerunButton'
 import { duration, timeAgo } from '../lib/format'
 
 export function BroadcastDetailPage() {
@@ -74,7 +75,9 @@ export function BroadcastDetailPage() {
           {error && <p className="error">{error}</p>}
           {isOwner && (
             <div className="owner-actions">
-              {b.status !== 'ENDED' && <Link className="btn btn-primary" to={`/broadcasts/${b.id}/studio`}>{b.status === 'LIVE' ? '송출 화면' : '송출하러 가기'}</Link>}
+              {b.status !== 'ENDED'
+                ? <Link className="btn btn-primary" to={`/broadcasts/${b.id}/studio`}>{b.status === 'LIVE' ? '송출 화면' : '송출하러 가기'}</Link>
+                : <RerunButton broadcast={b} />}
               <Link className="btn" to={`/broadcasts/${b.id}/edit`}>정보 수정</Link>
               <button className="btn btn-danger" onClick={remove}>삭제</button>
             </div>

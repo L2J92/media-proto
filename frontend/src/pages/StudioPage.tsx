@@ -9,6 +9,7 @@ import { ChatPanel } from '../components/ChatPanel'
 import { DonationBox } from '../components/DonationBox'
 import { QoePanel } from '../components/QoePanel'
 import { RecordingControl } from '../components/RecordingControl'
+import { RerunButton } from '../components/RerunButton'
 
 /**
  * 송출 화면. 장치(화면/카메라/마이크)를 먼저 고른 뒤 송출을 시작하면
@@ -231,7 +232,8 @@ export function StudioPage() {
 
         {isEnded && (
           <div className="studio-controls">
-            <button className="btn btn-primary" onClick={() => navigate('/broadcasts/new')}>새 방송 만들기</button>
+            <RerunButton broadcast={broadcast} />
+            <button className="btn" onClick={() => navigate('/broadcasts/new')}>새 방송 만들기</button>
             <Link className="btn" to={`/broadcasts/${broadcastId}`}>방송 상세</Link>
           </div>
         )}
